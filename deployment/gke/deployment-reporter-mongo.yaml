@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: repo-mongo
+spec:
+  ports:
+  - port: 27017
+    name: repo-mongo
+  selector:
+    app: repo-mongo
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: repo-mongo-pv-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: standard-exp  
+---
+apiVersion: apps/v1beta2 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: repo-mongo
+spec:
+  selector:
+    matchLabels:
+      app: repo-mongo
+  strategy:
+    type: Recreate      
+  template:
+    metadata:
+      labels:
+        app: repo-mongo
+    spec:
+      containers:
+      - image: mongo:4
+        name: repo-mongo        
+        ports:
+        - containerPort: 27017
+          name: repo-mongo
+        volumeMounts:
+        - name: repo-mongo-persistent-storage
+          mountPath: /data/db
+        resources:
+          requests:
+            cpu: "50m"
+      volumes:
+      - name: repo-mongo-persistent-storage
+        persistentVolumeClaim:
+          claimName: repo-mongo-pv-claim      

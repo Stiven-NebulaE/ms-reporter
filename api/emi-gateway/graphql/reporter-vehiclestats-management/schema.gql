@@ -1,0 +1,93 @@
+type CommandResponse {
+  "Response code"
+  code: Int
+  "Response message"
+  message: String
+}
+
+type ReporterVehicleStats {
+  "VehicleStats ID"
+  id: ID!
+  "name"
+  name: String!
+  "organization id"
+  organizationId: String!
+  "VehicleStats description"
+  description: String
+  "VehicleStats active flag"
+  active: Boolean!  
+  "object metadata"
+  metadata: ReporterVehicleStatsMetadata
+}
+
+type ReporterVehicleStatsMetadata {
+    createdBy: String
+		createdAt: BigInt
+		updatedBy: String
+		updatedAt: BigInt
+}
+
+type ReporterVehicleStatsListing {
+  "Listing"
+  listing: [ReporterVehicleStats]
+  "query total result count"
+  queryTotalResultCount: Int,  
+}
+
+
+input ReporterVehicleStatsFilterInput {
+  "Name"
+  name: String
+  "organization id"
+  organizationId: String!
+  "VehicleStats active flag"
+  active: Boolean
+}
+
+input ReporterVehicleStatsPaginationInput {
+  "Page"
+  page: Int!
+  "Count"
+  count: Int!
+  "query total result count flag"
+  queryTotalResultCount: Boolean
+}
+
+input ReporterVehicleStatsSortInput {
+  field: String!,
+  asc: Boolean!,
+}
+
+input ReporterVehicleStatsInput {
+  "name"
+  name: String
+  "organization id"
+  organizationId: String!
+  "VehicleStats description"
+  description: String
+  "VehicleStats active flag"
+  active: Boolean
+}
+
+
+type Query {
+  "Get VehicleStatss filtered "
+  ReporterVehicleStatsListing(filterInput: ReporterVehicleStatsFilterInput, paginationInput: ReporterVehicleStatsPaginationInput, sortInput: ReporterVehicleStatsSortInput): ReporterVehicleStatsListing
+  "Get VehicleStats by its id"
+  ReporterVehicleStats(id: ID!, organizationId: String!): ReporterVehicleStats
+}
+
+type Mutation {
+  "Create a new VehicleStats"
+  ReporterCreateVehicleStats(input: ReporterVehicleStatsInput!): ReporterVehicleStats
+  "Update an VehicleStats"
+  ReporterUpdateVehicleStats(id: ID!, input: ReporterVehicleStatsInput!, merge: Boolean!): ReporterVehicleStats  
+  "Deletes an VehicleStats"
+  ReporterDeleteVehicleStatss(ids: [ID]!): CommandResponse  
+}
+
+
+type Subscription {
+  "This events is triggered when a vehicleStats updated or deleted"
+  ReporterVehicleStatsModified(id: ID!): ReporterVehicleStats
+}
