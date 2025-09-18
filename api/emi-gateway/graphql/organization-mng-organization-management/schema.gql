@@ -1,0 +1,223 @@
+enum OrganizationMngOrganizationDocumentType {
+  "PASSPORT NUMBER"
+  PASSPORT_NUMBER
+  "IDENTITY CARD.  'Tarjeta de Identidad' in Spanish"
+  IDENTITY_CARD
+  "CITIZENSHIP CARD.  'cédula de ciudadanía' in Spanish"
+  CITIZENSHIP_CARD
+  "FOREIGNER IDENTITY.  'cédula de extranjeria' in Spanish"
+  FOREIGNER_IDENTITY
+  "NIP.  'Número de identificación personal' in Spanish.  Applies only for Colombia"
+  NIP
+  "NIUP.  'número único de identificación personal' in Spanish.  Applies only for Colombia"
+  NIUP
+  NIT
+}
+type CommandResponse {
+  "Response code."
+  code: Int
+  "Response message"
+  message: String
+}
+
+type OrganizationMngOrganization {
+  "Organization ID"
+  id: ID!
+  "name"
+  name: String!
+  "Organization description"
+  description: String
+  "Logo Url"
+  logoUrl: String
+  "Organization type"
+  type: String
+  "Organization active flag"
+  active: Boolean!  
+  "object metadata"
+  metadata: OrganizationMngOrganizationMetadata
+  document:String
+  documentType:OrganizationMngOrganizationDocumentType
+    "Contact Information"
+  contactInformation: OrganizationMngOrganizationContactInformation
+  "Organization primaryLink"
+  primaryLink: OrganizationMngOrganizacionPrimaryLink
+  attributes: JSON
+  interoperableProfileMap:JSON
+}
+
+type OrganizationMngParentOrganization {
+  "Organization ID"
+   id: ID
+ 
+}
+
+type OrganizationMngOrganizacionPrimaryLink {
+  url: String
+  username: String
+  password: String
+  organizationId: String
+}
+
+type OrganizationMngOrganizationMetadata {
+    createdBy: String
+		createdAt: BigInt
+		updatedBy: String
+		updatedAt: BigInt
+}
+
+type OrganizationMngOrganizationContactInformation {
+  "email address"
+  emailAddress: String
+  "phone number"
+  phoneNumber: String
+  "mobile phone number"
+  mobilePhoneNumber: String
+  "address"
+  address: String
+  "DANE location"
+  daneLocation: OrganizationMngOrganizationDaneLocation
+}
+
+type OrganizationMngOrganizationDaneLocation {
+  "stateCode"
+  stateCode: String
+  "stateName"
+  stateName: String
+  "cityName"
+  cityName: String
+  "cityCode"
+  cityCode: String
+  "countryCode"
+  countryCode: String
+  "countryName"
+  countryName: String
+  "countryIdentificationCode"
+  countryIdentificationCode: String
+}
+
+type OrganizationMngOrganizationListing {
+  "Listing"
+  listing: [OrganizationMngOrganization]
+  "query total result count"
+  queryTotalResultCount: Int,  
+}
+
+input OrganizationMngOrganizationFilterInput {
+  "Name"
+  name: String,
+  "Active"
+  active: Boolean
+  "Organization id"
+  organizationId: String,
+}
+
+input OrganizationMngOrganizationPaginationInput {
+  "Page"
+  page: Int!
+  "Count"
+  count: Int!
+  "query total result count flag"
+  queryTotalResultCount: Boolean
+}
+
+input OrganizationMngOrganizationSortInput {
+  field: String!,
+  asc: Boolean!,
+}
+
+input OrganizationMngOrganizationInput {
+  "name"
+  name: String
+  "Organization description"
+  description: String
+  "Logo Url"
+  logoUrl: String
+  "Organization type"
+  type: String
+  "Organization active flag"
+  active: Boolean
+  "Organization primary Link"
+  primaryLink: OrganizationMngOrganizacionPrimaryLinkInput
+  document:String
+  documentType:OrganizationMngOrganizationDocumentType
+   "Contact Information"
+  contactInformation: OrganizationMngOrganizacionContactInformationInput
+  attributes: JSON
+  interoperableProfileMap:JSON
+}
+
+input OrganizationMngOrganizacionPrimaryLinkInput {
+  url: String
+  username: String
+  password: String
+  organizationId: String
+}
+
+input OrganizationMngOrganizacionContactInformationInput {
+  """
+  email address  
+  RFC 5322   
+  regex ^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$  
+  """
+  emailAddress: String!
+  """
+  phone number  
+  [+CC(1-3) AC(1-3) PN(7)]  
+  regex ^(\+\d{1,3}\s)\(?\d{1,3}\)?[\s]\d{7}$  
+  eg. '+57 1 1234567', '+57 12 1234567'  
+  """
+  phoneNumber: String
+  """
+  phone number  
+  [+CC(1-3) AC(3) PN(7)]  
+  regex ^(\+\d{1,3}\s)\(?\d{3}\)?[\s]\d{7}$  
+  eg. '+57 123 1234567', '+57 300 3003030'  
+  """
+  mobilePhoneNumber: String!
+  "address"
+  address: String
+  "Dane location"
+  daneLocation: OrganizationMngOrganizationDaneLocationInput
+  
+}
+
+input OrganizationMngOrganizationDaneLocationInput {
+  "stateCode"
+  stateCode: String
+  "stateName"
+  stateName: String
+  "cityName"
+  cityName: String
+  "cityCode"
+  cityCode: String
+  "countryCode"
+  countryCode: String
+  "countryName"
+  countryName: String
+  "countryIdentificationCode"
+  countryIdentificationCode: String
+}
+
+type Query {
+  "Get Organizations filtered "
+  OrganizationMngOrganizationListing(filterInput: OrganizationMngOrganizationFilterInput, paginationInput: OrganizationMngOrganizationPaginationInput, sortInput: OrganizationMngOrganizationSortInput): OrganizationMngOrganizationListing
+  "Get Organization by its id"
+  OrganizationMngOrganization(id: ID!): OrganizationMngOrganization
+  "Get id organizacion"
+  OrganizationMngParentOrganization( organizationId: ID ): OrganizationMngParentOrganization
+}
+
+type Mutation {
+  "Create a new Organization"
+  OrganizationMngCreateOrganization(input: OrganizationMngOrganizationInput!): OrganizationMngOrganization
+  "Update an Organization"
+  OrganizationMngUpdateOrganization(id: ID!, input: OrganizationMngOrganizationInput!, merge: Boolean!): OrganizationMngOrganization  
+  "Deletes an Organization"
+  OrganizationMngDeleteOrganizations(ids: [ID]!): CommandResponse  
+}
+
+
+type Subscription {
+  "This events is triggered when a organization updated or deleted"
+  OrganizationMngOrganizationModified(id: ID!): OrganizationMngOrganization
+}

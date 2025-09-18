@@ -37,12 +37,34 @@ class EventStoreService {
       () => ConsoleLogger.e("EventStore incoming event subscription completed");
     };
     ConsoleLogger.i("EventStoreService starting ...");
+    ConsoleLogger.i(`EventStoreService: Available aggregate types: ${Object.keys(this.eventsProcessMap).join(', ')}`);
+    ConsoleLogger.i(`EventStoreService: Events process map: ${JSON.stringify(this.eventsProcessMap)}`);
 
     eventSourcing.configAggregateEventMap(this.aggregateTypeVsEventsVsConfig);
 
-    return from(Object.keys(this.eventsProcessMap)).pipe(
-      map((aggregateType) => this.subscribeEventHandler({ aggregateType, onErrorHandler, onCompleteHandler }))
+    ConsoleLogger.i(`EventStoreService: About to create observable from aggregate types`);
+    const aggregateTypes = Object.keys(this.eventsProcessMap);
+    ConsoleLogger.i(`EventStoreService: Aggregate types array: ${JSON.stringify(aggregateTypes)}`);
+    
+    const observable = from(aggregateTypes).pipe(
+      tap(aggregateTypes => ConsoleLogger.i(`EventStoreService: Processing aggregate types: ${JSON.stringify(aggregateTypes)}`)),
+      map((aggregateType) => {
+        ConsoleLogger.i(`EventStoreService: Subscribing to aggregate type: ${aggregateType}`);
+        return this.subscribeEventHandler({ aggregateType, onErrorHandler, onCompleteHandler });
+      }),
+      tap(result => ConsoleLogger.i(`EventStoreService: Subscription result: ${result}`)),
+      tap(() => ConsoleLogger.i(`EventStoreService: Observable completed`))
     );
+
+    // Subscribe to the observable to trigger the execution
+    ConsoleLogger.i(`EventStoreService: About to subscribe to the observable`);
+    observable.subscribe({
+      next: (result) => ConsoleLogger.i(`EventStoreService: Subscription successful: ${result}`),
+      error: (error) => ConsoleLogger.e(`EventStoreService: Subscription error: ${error.message}`),
+      complete: () => ConsoleLogger.i(`EventStoreService: All subscriptions completed`)
+    });
+
+    return observable;
   }
 
   /**
@@ -65,24 +87,41 @@ class EventStoreService {
    * @return { aggregateType  }
    */
   subscribeEventHandler({ aggregateType, onErrorHandler, onCompleteHandler }) {
+    ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Starting subscription for aggregateType: ${aggregateType}`);
+    ConsoleLogger.i(`EventStoreService.subscribeEventHandler: mbeKey: ${mbeKey}`);
+    
     const subscription =
       //MANDATORY:  AVOIDS ACK REGISTRY DUPLICATIONS
       eventSourcing.ensureAcknowledgeRegistry$(aggregateType, mbeKey).pipe(
-        mergeMap(() => eventSourcing.getEventListener$(aggregateType, mbeKey, false)),
+        tap(() => ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Acknowledge registry ensured for ${aggregateType}`)),
+        mergeMap(() => {
+          ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Getting event listener for ${aggregateType}`);
+          return eventSourcing.getEventListener$(aggregateType, mbeKey, false);
+        }),
 
-        map(event => ({ event, handlers: this.eventsProcessMap[aggregateType][event.et] })),
+        map(event => {
+          ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Received event: ${JSON.stringify(event)}`);
+          return { event, handlers: this.eventsProcessMap[aggregateType][event.et] };
+        }),
         //map(event => ({ event: event.data, acknowledgeMsg: event.acknowledgeMsg, handlers: this.eventsProcessMap[aggregateType][event.data.et] })),
-        map(({ event, handlers }) => ({
-          handlerObservables: handlers ? handlers
-          //Check if the event should be processed only on sync
-          .filter(({processOnlyOnSync}) => !processOnlyOnSync)
-          .map(({ fn, instance }) => fn.call(instance, event)): null,
-          event
-        })),
-        filter(({event, handlerObservables}) => handlerObservables),          
-        mergeMap(({ event, handlerObservables }) =>   
+        map(({ event, handlers }) => {
+          ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Event handlers: ${JSON.stringify(handlers)}`);
+          return {
+            handlerObservables: handlers ? handlers
+            //Check if the event should be processed only on sync
+            .filter(({processOnlyOnSync}) => !processOnlyOnSync)
+            .map(({ fn, instance }) => fn.call(instance, event)): null,
+            event
+          };
+        }),
+        filter(({event, handlerObservables}) => {
+          ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Filtering event, has handlers: ${!!handlerObservables}`);
+          return handlerObservables;
+        }),          
+        mergeMap(({ event, handlerObservables }) => {
+          ConsoleLogger.i(`EventStoreService.subscribeEventHandler: Processing event with ${handlerObservables.length} handlers`);
           // if there are not handlers for this event, we have to acknowledge the event on event store         
-          iif(() => handlerObservables.length == 0, 
+          return iif(() => handlerObservables.length == 0, 
             eventSourcing.acknowledgeEvent$(event, mbeKey),       
             concat(
               forkJoin(...handlerObservables),
@@ -91,19 +130,19 @@ class EventStoreService {
                 //MANDATORY: ACKWOWLEDGE THIS EVENT WAS PROCESSED
                 eventSourcing.acknowledgeEvent$(event, mbeKey)
               ),
-              //If the message should be acknowledged after being processed,             
-              // we execute the callback function            
-              tap(() => {                  
+              //If the message should be acknowledged after being processed,             
+              // we execute the callback function            
+              tap(() => {                  
                 if (event.acknowledgeMsg) {                    
                   event.acknowledgeMsg();
                 }
               })
             )
-          )
-        ),
+          );
+        }),
       ).subscribe(
         ({ at, aid, et, av }) => {
-          ConsoleLogger.d(`EventStoreService.subscribeEventHandler: at:${at}, et:${et}, aid:${aid}, av:${av}`);
+          ConsoleLogger.i(`EventStoreService.subscribeEventHandler: SUCCESS - Event processed: at:${at}, et:${et}, aid:${aid}, av:${av}`);
         },
         onErrorHandler,
         onCompleteHandler

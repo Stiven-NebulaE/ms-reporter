@@ -1,10 +1,8 @@
 'use strict'
 
-const { iif } = require("rxjs");
-const { tap } = require('rxjs/operators');
+const { of } = require("rxjs");
+const { tap, mergeMap } = require('rxjs/operators');
 const { ConsoleLogger } = require('@nebulae/backend-node-tools').log;
-
-const VehicleStatsDA = require("./data-access/VehicleStatsDA");
 /**
  * Singleton instance
  * @type { VehicleStatsES }
@@ -26,31 +24,29 @@ class VehicleStatsES {
      */
     generateEventProcessorMap() {
         return {
-            'VehicleStats': {
-                "VehicleStatsModified": { fn: instance.handleVehicleStatsModified$, instance, processOnlyOnSync: true },
+            'Vehicle': {
+                "VehicleGenerated": { fn: instance.handleVehicleGenerated$, instance, processOnlyOnSync: false },
             }
         }
     };
 
     /**
-     * Using the VehicleStatsModified events restores the MaterializedView
-     * This is just a recovery strategy
-     * @param {*} VehicleStatsModifiedEvent VehicleStats Modified Event
+     * Handle VehicleGenerated events from ms-generator
+     * @param {*} VehicleGeneratedEvent Vehicle Generated Event
      */
-    handleVehicleStatsModified$({ etv, aid, av, data, user, timestamp }) {
-        const aggregateDataMapper = [
-            /*etv=0 mapper*/ () => { throw new Error('etv 0 is not an option') },
-            /*etv=1 mapper*/ (eventData) => { return { ...eventData, modType: undefined }; }
-        ];
-        delete aggregateDataMapper.modType;
-        const aggregateData = aggregateDataMapper[etv](data);
-        return iif(
-            () => (data.modType === 'DELETE'),
-            VehicleStatsDA.deleteVehicleStats$(aid),
-            VehicleStatsDA.updateVehicleStatsFromRecovery$(aid, aggregateData, av)
-        ).pipe(
-            tap(() => ConsoleLogger.i(`VehicleStatsES.handleVehicleStatsModified: ${data.modType}: aid=${aid}, timestamp=${timestamp}`))
-        )
+    handleVehicleGenerated$({ etv, aid, av, data, user, timestamp }) {
+        ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: START - aid=${aid}, timestamp=${timestamp}, data=${JSON.stringify(data)}`);
+        
+        // Emit the event to the CRUD service for batch processing
+        const VehicleStatsCRUD = require("./VehicleStatsCRUD");
+        const crudInstance = VehicleStatsCRUD();
+        
+        ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: About to emit event to CRUD service`);
+        
+        return crudInstance.emitVehicleEvent$({ etv, aid, av, data, user, timestamp }).pipe(
+            tap(() => ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: SUCCESS - Event emitted for processing ${aid}`)),
+            tap(() => ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: END - aid=${aid}`))
+        );
     }
 }
 

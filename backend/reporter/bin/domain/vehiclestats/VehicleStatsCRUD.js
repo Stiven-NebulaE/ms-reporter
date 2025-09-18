@@ -1,8 +1,8 @@
 "use strict";
 
-const uuidv4 = require("uuid/v4");
-const { of, forkJoin, from, iif, throwError } = require("rxjs");
-const { mergeMap, catchError, map, toArray, pluck } = require('rxjs/operators');
+const crypto = require("crypto");
+const { of, forkJoin, from, iif, throwError, Subject, interval, EMPTY } = require("rxjs");
+const { mergeMap, catchError, map, toArray, pluck, takeUntil, tap, filter, bufferTime } = require('rxjs/operators');
 
 const Event = require("@nebulae/event-store").Event;
 const { CqrsResponseHelper } = require('@nebulae/backend-node-tools').cqrs;
@@ -13,11 +13,14 @@ const { brokerFactory } = require("@nebulae/backend-node-tools").broker;
 const broker = brokerFactory();
 const eventSourcing = require("../../tools/event-sourcing").eventSourcing;
 const VehicleStatsDA = require("./data-access/VehicleStatsDA");
+const MqttService = require('../../services/mqtt-service');
 
 const READ_ROLES = ["VEHICLESTATS_READ"];
 const WRITE_ROLES = ["VEHICLESTATS_WRITE"];
 const REQUIRED_ATTRIBUTES = [];
 const MATERIALIZED_VIEW_TOPIC = "emi-gateway-materialized-view-updates";
+const VEHICLE_GENERATED_TOPIC = "fleet/vehicles/generated";
+const WEBSOCKET_TOPIC = "emi-gateway-websocket-updates";
 
 /**
  * Singleton instance
@@ -27,6 +30,8 @@ let instance;
 
 class VehicleStatsCRUD {
   constructor() {
+    this.vehicleEventsSubject = new Subject();
+    this.mqttService = MqttService.getInstance();
   }
 
   /**     
@@ -40,133 +45,161 @@ class VehicleStatsCRUD {
   generateRequestProcessorMap() {
     return {
       'VehicleStats': {
-        "emigateway.graphql.query.ReporterVehicleStatsListing": { fn: instance.getReporterVehicleStatsListing$, instance, jwtValidation: { roles: READ_ROLES, attributes: REQUIRED_ATTRIBUTES } },
-        "emigateway.graphql.query.ReporterVehicleStats": { fn: instance.getVehicleStats$, instance, jwtValidation: { roles: READ_ROLES, attributes: REQUIRED_ATTRIBUTES } },
-        "emigateway.graphql.mutation.ReporterCreateVehicleStats": { fn: instance.createVehicleStats$, instance, jwtValidation: { roles: WRITE_ROLES, attributes: REQUIRED_ATTRIBUTES } },
-        "emigateway.graphql.mutation.ReporterUpdateVehicleStats": { fn: instance.updateVehicleStats$, jwtValidation: { roles: WRITE_ROLES, attributes: REQUIRED_ATTRIBUTES } },
-        "emigateway.graphql.mutation.ReporterDeleteVehicleStatss": { fn: instance.deleteVehicleStatss$, jwtValidation: { roles: WRITE_ROLES, attributes: REQUIRED_ATTRIBUTES } },
+        "emigateway.graphql.query.ReporterGetFleetStatistics": { fn: instance.getFleetStatistics$, instance, jwtValidation: { roles: READ_ROLES, attributes: REQUIRED_ATTRIBUTES } },
       }
     }
   };
 
 
-  /**  
-   * Gets the VehicleStats list
-   *
-   * @param {*} args args
+  /**
+   * Gets fleet statistics
    */
-  getReporterVehicleStatsListing$({ args }, authToken) {
-    const { filterInput, paginationInput, sortInput } = args;
-    const { queryTotalResultCount = false } = paginationInput || {};
+  getFleetStatistics$({ root, args, jwt }, authToken) {
+    console.log(`ESTE LOG NO getFleetStatistics de CRUD <========`);
 
-    return forkJoin(
-      VehicleStatsDA.getVehicleStatsList$(filterInput, paginationInput, sortInput).pipe(toArray()),
-      queryTotalResultCount ? VehicleStatsDA.getVehicleStatsSize$(filterInput) : of(undefined),
-    ).pipe(
-      map(([listing, queryTotalResultCount]) => ({ listing, queryTotalResultCount })),
+    ConsoleLogger.i(`VehicleStatsCRUD.getFleetStatistics$: START - Getting fleet statistics`);
+    // return of({
+    //   totalVehicles: 100,
+    //   vehiclesByType: {
+    //     SUV: 10,
+    //     PickUp: 20,
+    //     Sedan: 30,
+    //     Hatchback: 40,
+    //     Coupe: 50
+    //   },
+    //   vehiclesByDecade: {
+    //     decade1980s: 10,
+    //     decade1990s: 20,
+    //     decade2000s: 30,
+    //     decade2010s: 40,
+    //     decade2020s: 50
+    //   },
+    //   vehiclesBySpeedClass: {
+    //     Lento: 10,
+    //     Normal: 20,
+    //     Rapido: 30
+    //   },
+    //   hpStats: {
+    //     min: 100,
+    //     max: 1000,
+    //     sum: 10000,
+    //     count: 100,
+    //     avg: 100
+    //   },
+    //   lastUpdated: new Date().toISOString()
+    // })
+    // return VehicleStatsDA.getFleetStatistics$()
+    return VehicleStatsDA.getFleetStatistics$().pipe(
+      tap(stats => ConsoleLogger.i(`VehicleStatsCRUD.getFleetStatistics$: Retrieved stats: ${JSON.stringify(stats)}`)),
       mergeMap(rawResponse => CqrsResponseHelper.buildSuccessResponse$(rawResponse)),
-      catchError(err => iif(() => err.name === 'MongoTimeoutError', throwError(err), CqrsResponseHelper.handleError$(err)))
+      tap(response => ConsoleLogger.i(`VehicleStatsCRUD.getFleetStatistics$: SUCCESS - Response: ${JSON.stringify(response)}`)),
+      catchError(err => {
+        console.error(`VehicleStatsCRUD.getFleetStatistics$: ERROR - ${err.message}`);
+        return iif(() => err.name === 'MongoTimeoutError', throwError(err), CqrsResponseHelper.handleError$(err));
+      })
     );
   }
 
-  /**  
-   * Gets the get VehicleStats by id
-   *
-   * @param {*} args args
-   */
-  getVehicleStats$({ args }, authToken) {
-    const { id, organizationId } = args;
-    return VehicleStatsDA.getVehicleStats$(id, organizationId).pipe(
-      mergeMap(rawResponse => CqrsResponseHelper.buildSuccessResponse$(rawResponse)),
-      catchError(err => iif(() => err.name === 'MongoTimeoutError', throwError(err), CqrsResponseHelper.handleError$(err)))
-    );
-
-  }
-
-
   /**
-  * Create a VehicleStats
-  */
-  createVehicleStats$({ root, args, jwt }, authToken) {
-    const aggregateId = uuidv4();
-    const input = {
-      active: false,
-      ...args.input,
-    };
-
-    return VehicleStatsDA.createVehicleStats$(aggregateId, input, authToken.preferred_username).pipe(
-      mergeMap(aggregate => forkJoin(
-        CqrsResponseHelper.buildSuccessResponse$(aggregate),
-        eventSourcing.emitEvent$(instance.buildAggregateMofifiedEvent('CREATE', 'VehicleStats', aggregateId, authToken, aggregate), { autoAcknowledgeKey: process.env.MICROBACKEND_KEY }),
-        broker.send$(MATERIALIZED_VIEW_TOPIC, `ReporterVehicleStatsModified`, aggregate)
-      )),
-      map(([sucessResponse]) => sucessResponse),
-      catchError(err => iif(() => err.name === 'MongoTimeoutError', throwError(err), CqrsResponseHelper.handleError$(err)))
-    )
-  }
-
-  /**
-   * updates an VehicleStats 
+   * Processes vehicle events in batches
    */
-  updateVehicleStats$({ root, args, jwt }, authToken) {
-    const { id, input, merge } = args;
-
-    return (merge ? VehicleStatsDA.updateVehicleStats$ : VehicleStatsDA.replaceVehicleStats$)(id, input, authToken.preferred_username).pipe(
-      mergeMap(aggregate => forkJoin(
-        CqrsResponseHelper.buildSuccessResponse$(aggregate),
-        eventSourcing.emitEvent$(instance.buildAggregateMofifiedEvent(merge ? 'UPDATE_MERGE' : 'UPDATE_REPLACE', 'VehicleStats', id, authToken, aggregate), { autoAcknowledgeKey: process.env.MICROBACKEND_KEY }),
-        broker.send$(MATERIALIZED_VIEW_TOPIC, `ReporterVehicleStatsModified`, aggregate)
-      )),
-      map(([sucessResponse]) => sucessResponse),
-      catchError(err => iif(() => err.name === 'MongoTimeoutError', throwError(err), CqrsResponseHelper.handleError$(err)))
-    )
-  }
-
-
-  /**
-   * deletes an VehicleStats
-   */
-  deleteVehicleStatss$({ root, args, jwt }, authToken) {
-    const { ids } = args;
-    return forkJoin(
-      VehicleStatsDA.deleteVehicleStatss$(ids),
-      from(ids).pipe(
-        mergeMap(id => eventSourcing.emitEvent$(instance.buildAggregateMofifiedEvent('DELETE', 'VehicleStats', id, authToken, {}), { autoAcknowledgeKey: process.env.MICROBACKEND_KEY })),
-        toArray()
-      )
-    ).pipe(
-      map(([ok, esResps]) => ({ code: ok ? 200 : 400, message: `VehicleStats with id:s ${JSON.stringify(ids)} ${ok ? "has been deleted" : "not found for deletion"}` })),
-      mergeMap((r) => forkJoin(
-        CqrsResponseHelper.buildSuccessResponse$(r),
-        broker.send$(MATERIALIZED_VIEW_TOPIC, `ReporterVehicleStatsModified`, { id: 'deleted', name: '', active: false, description: '' })
-      )),
-      map(([cqrsResponse, brokerRes]) => cqrsResponse),
-      catchError(err => iif(() => err.name === 'MongoTimeoutError', throwError(err), CqrsResponseHelper.handleError$(err)))
+  processVehicleEvents$() {
+    ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Starting vehicle events processing`);
+    
+    // Start MQTT subscription
+    this.mqttService.start$().subscribe({
+      next: (result) => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: MQTT service started: ${result}`),
+      error: (error) => ConsoleLogger.e(`VehicleStatsCRUD.processVehicleEvents$: MQTT service error: ${error.message}`)
+    });
+    
+    // Subscribe to MQTT events and process them in batches
+    return this.mqttService.getVehicleEventsSubject().pipe(
+      tap(event => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Received event from subject: ${JSON.stringify(event)}`)),
+      bufferTime(1000), // Buffer events for 1 second
+      filter(buffer => buffer.length > 0),
+      tap(buffer => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Processing batch of ${buffer.length} events`)),
+      mergeMap(events => this.processBatch$(events))
     );
   }
 
+  /**
+   * Processes a batch of vehicle events
+   */
+  processBatch$(events) {
+    try {
+      console.log(`ESTE LOG SÍ processBatch <========`);
+
+      ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: START - Processing batch of ${events.length} events`);
+      
+      // Extract all aids from events
+      const allAids = events.map(event => event.data?.aid || event.aid);
+      
+      // Check which aids have been processed before
+      return VehicleStatsDA.getProcessedVehicleAids$(allAids).pipe(
+        mergeMap(processedAids => {
+          // Filter out already processed vehicles
+          const newEvents = events.filter(event => {
+            const aid = event.data?.aid || event.aid;
+            return !processedAids.includes(aid);
+          });
+          
+          ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Filtered to ${newEvents.length} new events (${events.length - newEvents.length} already processed)`);
+          
+          if (newEvents.length === 0) {
+            ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: No new events to process`);
+            return of({ success: true });
+          }
+
+          ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Processing ${newEvents.length} new vehicles`);
+
+          // Process each new vehicle and update statistics
+          return VehicleStatsDA.updateFleetStatistics$(newEvents).pipe(
+            tap(() => {
+              ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Statistics updated successfully`);
+              
+              // Mark vehicles as processed
+              const newAids = newEvents.map(event => event.data?.aid || event.aid);
+              VehicleStatsDA.markVehicleAidsAsProcessed$(newAids).subscribe({
+                next: () => ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Marked ${newAids.length} vehicles as processed`),
+                error: (error) => console.error(`VehicleStatsCRUD.processBatch$: Error marking vehicles as processed: ${error.message}`)
+              });
+              
+              // Send updated statistics to WebSocket
+              VehicleStatsDA.getFleetStatistics$().subscribe(stats => {
+                ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Sending stats to WebSocket: ${JSON.stringify(stats)}`);
+                ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: WebSocket topic: ${WEBSOCKET_TOPIC}`);
+                broker.send$(WEBSOCKET_TOPIC, {
+                  type: 'FLEET_STATISTICS_UPDATED',
+                  data: stats,
+                  timestamp: new Date().toISOString()
+                }).subscribe({
+                  next: () => ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Stats sent to WebSocket successfully`),
+                  error: (error) => console.error(`VehicleStatsCRUD.processBatch$: WebSocket error: ${error.message}`)
+                });
+              });
+            }),
+            tap(() => ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: SUCCESS - Batch processing completed`)),
+            map(() => ({ success: true })),
+            catchError(error => {
+              console.error(`VehicleStatsCRUD.processBatch$: ERROR - ${error.message}`);
+              return of({ success: false, error: error.message });
+            })
+          );
+        })
+      );
+    } catch (error) {
+      console.error(`VehicleStatsCRUD.processBatch$: CATCH ERROR - ${error.message}`);
+      return of({ success: false, error: error.message });
+    }
+  }
 
   /**
-   * Generate an Modified event 
-   * @param {string} modType 'CREATE' | 'UPDATE' | 'DELETE'
-   * @param {*} aggregateType 
-   * @param {*} aggregateId 
-   * @param {*} authToken 
-   * @param {*} data 
-   * @returns {Event}
+   * Emits a vehicle event to the subject
    */
-  buildAggregateMofifiedEvent(modType, aggregateType, aggregateId, authToken, data) {
-    return new Event({
-      eventType: `${aggregateType}Modified`,
-      eventTypeVersion: 1,
-      aggregateType: aggregateType,
-      aggregateId,
-      data: {
-        modType,
-        ...data
-      },
-      user: authToken.preferred_username
-    })
+  emitVehicleEvent$(event) {
+    ConsoleLogger.i(`VehicleStatsCRUD.emitVehicleEvent$: Received event with aid=${event.aid}`);
+    this.vehicleEventsSubject.next(event);
+    return of({ success: true });
   }
 }
 

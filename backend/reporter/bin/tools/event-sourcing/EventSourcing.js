@@ -15,6 +15,15 @@ let instance;
 class EventSourcing extends EventStore {
 
     constructor() {
+        ConsoleLogger.i(`EventSourcing: MICROBACKEND_KEY=${process.env.MICROBACKEND_KEY}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_BROKER_TYPE=${process.env.EVENT_STORE_BROKER_TYPE}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_BROKER_EVENTS_TOPIC=${process.env.EVENT_STORE_BROKER_EVENTS_TOPIC}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_BROKER_URL=${process.env.EVENT_STORE_BROKER_URL}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_STORE_TYPE=${process.env.EVENT_STORE_STORE_TYPE}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_STORE_URL=${process.env.EVENT_STORE_STORE_URL}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_STORE_EVENTSTORE_DB_NAME=${process.env.EVENT_STORE_STORE_EVENTSTORE_DB_NAME}`);
+        ConsoleLogger.i(`EventSourcing: EVENT_STORE_STORE_AGGREGATES_DB_NAME=${process.env.EVENT_STORE_STORE_AGGREGATES_DB_NAME}`);
+        
         super(
             {
                 type: process.env.EVENT_STORE_BROKER_TYPE,

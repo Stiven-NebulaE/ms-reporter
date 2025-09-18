@@ -1,49 +1,53 @@
-import React, {useRef} from 'react';
-import {FusePageCarded} from '@fuse';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import withReducer from 'app/store/withReducer';
-import VehicleStatssTable from './VehicleStatssTable';
+import { FuseLoading } from '@fuse';
+import { useQuery, useSubscription } from '@apollo/react-hooks';
+import { Box } from '@material-ui/core';
+import { ReporterGetFleetStatistics, FleetStatisticsUpdatedSubscription } from '../gql/VehicleStats';
 import VehicleStatssHeader from './VehicleStatssHeader';
+import VehicleStatssTable from './VehicleStatssTable';
 import reducer from '../store/reducers';
-import {FuseLoading} from '@fuse';
 
-import VehicleStatssFilterHeader from './VehicleStatssFilterHeader';
-import VehicleStatssFilterContent from './VehicleStatssFilterContent';
-
-function VehicleStatss()
-{
+function VehicleStatss() {
     const user = useSelector(({ auth }) => auth.user);
-    const pageLayout = useRef(null);
+    const [fleetStats, setFleetStats] = useState(null);
 
-    
-    if(!user.selectedOrganization){
-        return (<FuseLoading />);
+    // GraphQL query
+    const { data: queryData, refetch: refetchStats } = useQuery(ReporterGetFleetStatistics, {
+        fetchPolicy: 'network-only'
+    });
+
+    // GraphQL subscription for real-time fleet statistics updates
+    const { data: subscriptionData } = useSubscription(FleetStatisticsUpdatedSubscription);
+
+    // Update stats when GraphQL query resolves
+    useEffect(() => {
+        if (queryData && queryData.ReporterGetFleetStatistics) {
+            setFleetStats(queryData.ReporterGetFleetStatistics);
+        }
+    }, [queryData]);
+
+    // Handle subscription data for real-time updates
+    useEffect(() => {
+        if (subscriptionData && subscriptionData.ReporterFleetStatisticsUpdated) {
+            setFleetStats(subscriptionData.ReporterFleetStatisticsUpdated);
+        }
+    }, [subscriptionData]);
+
+    if (!user.selectedOrganization) {
+        return <FuseLoading />;
     }
 
     return (
-        <FusePageCarded
-            classes={{
-                content: "flex",
-                //header : "min-h-72 h-72 sm:h-136 sm:min-h-136" // default tall/short header
-                header: "min-h-72 h-72 sm:h-72 sm:min-h-72" // short header always
-            }}
-            header={
-                <VehicleStatssHeader pageLayout={pageLayout} />
-            }
-            content={
-                <VehicleStatssTable/>
-            }
-
-            leftSidebarHeader={
-                <VehicleStatssFilterHeader/>
-            }
-            leftSidebarContent={
-                <VehicleStatssFilterContent/>
-            }
-            ref={pageLayout}
-            innerScroll
-            leftSidebarVariant='permanent'
-        />
+        <Box>
+            <VehicleStatssHeader 
+                fleetStats={fleetStats}
+            />
+            <VehicleStatssTable 
+                fleetStats={fleetStats}
+            />
+        </Box>
     );
 }
 

@@ -1,6 +1,6 @@
 "use strict";
 
-const { empty, Observable } = require("rxjs");
+const { empty, Observable, concat } = require("rxjs");
 
 const VehicleStatsCRUD = require("./VehicleStatsCRUD")();
 const VehicleStatsES = require("./VehicleStatsES")();
@@ -10,7 +10,10 @@ module.exports = {
   /**
    * domain start workflow
    */
-  start$: DataAcess.start$,
+  start$: concat(
+    DataAcess.start$,
+    VehicleStatsCRUD.processVehicleEvents$()
+  ),
   /**
    * start for syncing workflow
    * @returns {Observable}

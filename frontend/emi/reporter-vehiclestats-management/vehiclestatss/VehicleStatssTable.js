@@ -1,174 +1,155 @@
-import React, { useEffect, useState } from 'react';
-import { Icon, Table, TableBody, TableCell, TablePagination, TableRow, Checkbox } from '@material-ui/core';
-import { FuseScrollbars } from '@fuse';
-import { withRouter } from 'react-router-dom';
-import VehicleStatssTableHead from './VehicleStatssTableHead';
-import * as Actions from '../store/actions';
-import { useDispatch, useSelector } from 'react-redux';
-import { useSubscription } from "@apollo/react-hooks";
-import { MDText } from 'i18n-react';
-import i18n from "../i18n";
-import { onReporterVehicleStatsModified } from "../gql/VehicleStats";
+import React from 'react';
+import { 
+    Paper, 
+    Typography, 
+    Box, 
+    Grid, 
+    Card, 
+    CardContent,
+    LinearProgress,
+    Chip
+} from '@material-ui/core';
 
-function VehicleStatssTable(props) {
-    const dispatch = useDispatch();
-    const vehicleStatss = useSelector(({ VehicleStatsManagement }) => VehicleStatsManagement.vehicleStatss.data);
-    const { filters, rowsPerPage, page, order, totalDataCount } = useSelector(({ VehicleStatsManagement }) => VehicleStatsManagement.vehicleStatss);
-    const user = useSelector(({ auth }) => auth.user);
-    const [selected, setSelected] = useState([]);
-    const T = new MDText(i18n.get(user.locale));
-
-    const onReporterVehicleStatsModifiedData = useSubscription(...onReporterVehicleStatsModified({ id: "ANY" }));
-
-    useEffect(() => {
-        dispatch(Actions.setVehicleStatssFilterOrganizationId(user.selectedOrganization.id));
-    }, [user.selectedOrganization]);
-    useEffect(() => {
-        if (filters.organizationId){
-            dispatch(Actions.getVehicleStatss({ filters, order, page, rowsPerPage }));
-        }            
-    }, [dispatch, filters, order, page, rowsPerPage, onReporterVehicleStatsModifiedData.data]);
-
-
-    function handleRequestSort(event, property) {
-        const id = property;
-        let direction = 'desc';
-
-        if (order.id === property && order.direction === 'desc') {
-            direction = 'asc';
-        }
-
-        dispatch(Actions.setVehicleStatssOrder({ direction, id }));
+function VehicleStatssTable({ fleetStats }) {
+    if (!fleetStats) {
+        return (
+            <Paper elevation={1} p={3}>
+                <Typography variant="h6" align="center">
+                    Cargando estadísticas...
+                </Typography>
+            </Paper>
+        );
     }
 
+    const { 
+        totalVehicles, 
+        vehiclesByType, 
+        vehiclesByDecade, 
+        vehiclesBySpeedClass, 
+        hpStats 
+    } = fleetStats;
 
-    function handleRequestRemove(event, property) {
-        dispatch(Actions.removeVehicleStatss(selected, { filters, order, page, rowsPerPage }));
-    }
-
-    function handleSelectAllClick(event) {
-        if (event.target.checked) {
-            setSelected(vehicleStatss.map(n => n.id));
-            return;
-        }
-        setSelected([]);
-    }
-
-    function handleClick(item) {
-        props.history.push('/vehiclestats-mng/vehiclestatss/' + item.id + '/' + item.name.replace(/[\s_·!@#$%^&*(),.?":{}|<>]+/g, '-').toLowerCase());
-    }
-
-    function handleCheck(event, id) {
-        const selectedIndex = selected.indexOf(id);
-        let newSelected = [];
-
-        if (selectedIndex === -1) {
-            newSelected = newSelected.concat(selected, id);
-        }
-        else if (selectedIndex === 0) {
-            newSelected = newSelected.concat(selected.slice(1));
-        }
-        else if (selectedIndex === selected.length - 1) {
-            newSelected = newSelected.concat(selected.slice(0, -1));
-        }
-        else if (selectedIndex > 0) {
-            newSelected = newSelected.concat(
-                selected.slice(0, selectedIndex),
-                selected.slice(selectedIndex + 1)
-            );
-        }
-
-        setSelected(newSelected);
-    }
-
-    function handleChangePage(event, page) {
-        dispatch(Actions.setVehicleStatssPage(page));
-    }
-
-    function handleChangeRowsPerPage(event) {
-        dispatch(Actions.setVehicleStatssRowsPerPage(event.target.value));
-    }
+    // Calculate percentages
+    const getPercentage = (value) => {
+        return totalVehicles > 0 ? ((value / totalVehicles) * 100).toFixed(1) : 0;
+    };
 
     return (
-        <div className="w-full flex flex-col">
+        <Box p={2}>
+            <Grid container spacing={3}>
+                {/* Vehicles by Type */}
+                <Grid item xs={12} md={4}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Vehículos por Tipo
+                            </Typography>
+                            {Object.entries(vehiclesByType).map(([type, count]) => (
+                                <Box key={type} mb={1}>
+                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                        <Typography variant="body2">{type}:</Typography>
+                                        <Typography variant="body2">
+                                            {count.toLocaleString()} ({getPercentage(count)}%)
+                                        </Typography>
+                                    </Box>
+                                    <LinearProgress 
+                                        variant="determinate" 
+                                        value={getPercentage(count)} 
+                                        style={{ marginTop: 4 }}
+                                    />
+                                </Box>
+                            ))}
+                        </CardContent>
+                    </Card>
+                </Grid>
 
-            <FuseScrollbars className="flex-grow overflow-x-auto">
-
-                <Table className="min-w-xs" aria-labelledby="tableTitle">
-
-                    <VehicleStatssTableHead
-                        numSelected={selected.length}
-                        order={order}
-                        onSelectAllClick={handleSelectAllClick}
-                        onRequestSort={handleRequestSort}
-                        onRequestRemove={handleRequestRemove}
-                        rowCount={vehicleStatss.length}
-                    />
-
-                    <TableBody>
-                        {
-                            vehicleStatss.map(n => {
-                                const isSelected = selected.indexOf(n.id) !== -1;
+                {/* Vehicles by Decade */}
+                <Grid item xs={12} md={4}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Vehículos por Década
+                            </Typography>
+                            {Object.entries(vehiclesByDecade).map(([decade, count]) => {
+                                const decadeLabel = decade.replace('decade', '').replace('s', 's');
                                 return (
-                                    <TableRow
-                                        className="h-64 cursor-pointer"
-                                        hover
-                                        role="checkbox"
-                                        aria-checked={isSelected}
-                                        tabIndex={-1}
-                                        key={n.id}
-                                        selected={isSelected}
-                                        onClick={event => handleClick(n)}
-                                    >
-                                        <TableCell className="w-48 px-4 sm:px-12" padding="checkbox">
-                                            <Checkbox
-                                                checked={isSelected}
-                                                onClick={event => event.stopPropagation()}
-                                                onChange={event => handleCheck(event, n.id)}
-                                            />
-                                        </TableCell>
-
-
-                                        <TableCell component="th" scope="row">
-                                            {n.name}
-                                        </TableCell>
-
-
-                                        <TableCell component="th" scope="row" align="right">
-                                            {n.active ?
-                                                (
-                                                    <Icon className="text-green text-20">check_circle</Icon>
-                                                ) :
-                                                (
-                                                    <Icon className="text-red text-20">remove_circle</Icon>
-                                                )
-                                            }
-                                        </TableCell>
-                                    </TableRow>
+                                    <Box key={decade} mb={1}>
+                                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                                            <Typography variant="body2">{decadeLabel}:</Typography>
+                                            <Typography variant="body2">
+                                                {count.toLocaleString()} ({getPercentage(count)}%)
+                                            </Typography>
+                                        </Box>
+                                        <LinearProgress 
+                                            variant="determinate" 
+                                            value={getPercentage(count)} 
+                                            style={{ marginTop: 4 }}
+                                        />
+                                    </Box>
                                 );
                             })}
-                    </TableBody>
-                </Table>
-            </FuseScrollbars>
+                        </CardContent>
+                    </Card>
+                </Grid>
 
-            <TablePagination
-                component="div"
-                count={totalDataCount}
-                rowsPerPage={rowsPerPage}
-                page={page}
-                backIconButtonProps={{
-                    'aria-label': 'Previous Page'
-                }}
-                nextIconButtonProps={{
-                    'aria-label': 'Next Page'
-                }}
-                onChangePage={handleChangePage}
-                onChangeRowsPerPage={handleChangeRowsPerPage}
-                labelRowsPerPage={T.translate("vehiclestatss.rows_per_page")}
-                labelDisplayedRows={({ from, to, count }) => `${from}-${to === -1 ? count : to} ${T.translate("vehiclestatss.of")} ${count}`}
-            />
-        </div>
+                {/* HP Statistics */}
+                <Grid item xs={12} md={4}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Potencia (HP)
+                            </Typography>
+                            <Box mb={2}>
+                                <Typography variant="body2">
+                                    Mínimo: <Chip label={hpStats.min} size="small" />
+                                </Typography>
+                            </Box>
+                            <Box mb={2}>
+                                <Typography variant="body2">
+                                    Máximo: <Chip label={hpStats.max} size="small" />
+                                </Typography>
+                            </Box>
+                            <Box mb={2}>
+                                <Typography variant="body2">
+                                    Promedio: <Chip label={hpStats.avg.toFixed(1)} size="small" />
+                                </Typography>
+                            </Box>
+                        </CardContent>
+                    </Card>
+                </Grid>
+
+                {/* Speed Classification */}
+                <Grid item xs={12}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Clasificación por Velocidad
+                            </Typography>
+                            <Grid container spacing={2}>
+                                {Object.entries(vehiclesBySpeedClass).map(([speedClass, count]) => (
+                                    <Grid item xs={12} sm={4} key={speedClass}>
+                                        <Box textAlign="center">
+                                            <Typography variant="h4" color="primary">
+                                                {count.toLocaleString()}
+                                            </Typography>
+                                            <Typography variant="body2" color="textSecondary">
+                                                {speedClass} ({getPercentage(count)}%)
+                                            </Typography>
+                                            <LinearProgress 
+                                                variant="determinate" 
+                                                value={getPercentage(count)} 
+                                                style={{ marginTop: 8 }}
+                                            />
+                                        </Box>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
+        </Box>
     );
 }
 
-export default withRouter(VehicleStatssTable);
+export default VehicleStatssTable;

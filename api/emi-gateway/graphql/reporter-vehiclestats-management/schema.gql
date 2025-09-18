@@ -1,93 +1,51 @@
 type CommandResponse {
-  "Response code"
   code: Int
-  "Response message"
   message: String
 }
 
-type ReporterVehicleStats {
-  "VehicleStats ID"
-  id: ID!
-  "name"
-  name: String!
-  "organization id"
-  organizationId: String!
-  "VehicleStats description"
-  description: String
-  "VehicleStats active flag"
-  active: Boolean!  
-  "object metadata"
-  metadata: ReporterVehicleStatsMetadata
+type FleetStatistics {
+  totalVehicles: Int!
+  vehiclesByType: VehicleTypeStats!
+  vehiclesByDecade: VehicleDecadeStats!
+  vehiclesBySpeedClass: VehicleSpeedClassStats!
+  hpStats: HpStats!
+  lastUpdated: String!
 }
 
-type ReporterVehicleStatsMetadata {
-    createdBy: String
-		createdAt: BigInt
-		updatedBy: String
-		updatedAt: BigInt
+type VehicleTypeStats {
+  SUV: Int!
+  PickUp: Int!
+  Sedan: Int!
+  Hatchback: Int!
+  Coupe: Int!
 }
 
-type ReporterVehicleStatsListing {
-  "Listing"
-  listing: [ReporterVehicleStats]
-  "query total result count"
-  queryTotalResultCount: Int,  
+type VehicleDecadeStats {
+  decade1980s: Int!
+  decade1990s: Int!
+  decade2000s: Int!
+  decade2010s: Int!
+  decade2020s: Int!
 }
 
-
-input ReporterVehicleStatsFilterInput {
-  "Name"
-  name: String
-  "organization id"
-  organizationId: String!
-  "VehicleStats active flag"
-  active: Boolean
+type VehicleSpeedClassStats {
+  Lento: Int!
+  Normal: Int!
+  Rapido: Int!
 }
 
-input ReporterVehicleStatsPaginationInput {
-  "Page"
-  page: Int!
-  "Count"
+type HpStats {
+  min: Int!
+  max: Int!
+  sum: Int!
   count: Int!
-  "query total result count flag"
-  queryTotalResultCount: Boolean
+  avg: Float!
 }
 
-input ReporterVehicleStatsSortInput {
-  field: String!,
-  asc: Boolean!,
+extend type Query {
+  ReporterGetFleetStatistics: FleetStatistics
 }
 
-input ReporterVehicleStatsInput {
-  "name"
-  name: String
-  "organization id"
-  organizationId: String!
-  "VehicleStats description"
-  description: String
-  "VehicleStats active flag"
-  active: Boolean
-}
-
-
-type Query {
-  "Get VehicleStatss filtered "
-  ReporterVehicleStatsListing(filterInput: ReporterVehicleStatsFilterInput, paginationInput: ReporterVehicleStatsPaginationInput, sortInput: ReporterVehicleStatsSortInput): ReporterVehicleStatsListing
-  "Get VehicleStats by its id"
-  ReporterVehicleStats(id: ID!, organizationId: String!): ReporterVehicleStats
-}
-
-type Mutation {
-  "Create a new VehicleStats"
-  ReporterCreateVehicleStats(input: ReporterVehicleStatsInput!): ReporterVehicleStats
-  "Update an VehicleStats"
-  ReporterUpdateVehicleStats(id: ID!, input: ReporterVehicleStatsInput!, merge: Boolean!): ReporterVehicleStats  
-  "Deletes an VehicleStats"
-  ReporterDeleteVehicleStatss(ids: [ID]!): CommandResponse  
-}
-
-
-type Subscription {
-  "This events is triggered when a vehicleStats updated or deleted"
-  ReporterVehicleStatsModified(id: ID!): ReporterVehicleStats
+extend type Subscription {
+  ReporterFleetStatisticsUpdated: FleetStatistics
 }

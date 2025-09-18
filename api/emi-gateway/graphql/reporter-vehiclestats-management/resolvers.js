@@ -22,7 +22,7 @@ function getResponseFromBackEnd$(response) {
                 if (resp.result.code != 200) {
                     const err = new Error();
                     err.name = 'Error';
-                    err.message = resp.result.error;
+                    err.message = resp.result.error.msg;
                     // this[Symbol()] = resp.result.error;
                     Error.captureStackTrace(err, 'Error');
                     throw err;
@@ -71,30 +71,19 @@ module.exports = {
 
     //// QUERY ///////
     Query: {
-        ReporterVehicleStatsListing(root, args, context) {
-            return sendToBackEndHandler$(root, args, context, READ_ROLES, 'query', 'VehicleStats', 'ReporterVehicleStatsListing').toPromise();
-        },
-        ReporterVehicleStats(root, args, context) {
-            return sendToBackEndHandler$(root, args, context, READ_ROLES, 'query', 'VehicleStats', 'ReporterVehicleStats').toPromise();
+        ReporterGetFleetStatistics(root, args, context) {
+            return sendToBackEndHandler$(root, args, context, READ_ROLES, 'query', 'VehicleStats', 'ReporterGetFleetStatistics', 10000).toPromise();
         }
     },
 
     //// MUTATIONS ///////
     Mutation: {
-        ReporterCreateVehicleStats(root, args, context) {
-            return sendToBackEndHandler$(root, args, context, WRITE_ROLES, 'mutation', 'VehicleStats', 'ReporterCreateVehicleStats').toPromise();
-        },
-        ReporterUpdateVehicleStats(root, args, context) {
-            return sendToBackEndHandler$(root, args, context, WRITE_ROLES, 'mutation', 'VehicleStats', 'ReporterUpdateVehicleStats').toPromise();
-        },
-        ReporterDeleteVehicleStatss(root, args, context) {
-            return sendToBackEndHandler$(root, args, context, WRITE_ROLES, 'mutation', 'VehicleStats', 'ReporterDeleteVehicleStatss').toPromise();
-        },
+        // No mutations needed for this PoC
     },
 
     //// SUBSCRIPTIONS ///////
     Subscription: {
-        ReporterVehicleStatsModified: {
+        ReporterFleetStatisticsUpdated: {
             subscribe: withFilter(
                 (payload, variables, context, info) => {
                     //Checks the roles of the user, if the user does not have at least one of the required roles, an error will be thrown
@@ -102,16 +91,14 @@ module.exports = {
                         context.authToken.realm_access.roles,
                         READ_ROLES,
                         "Reporter",
-                        "ReporterVehicleStatsModified",
+                        "ReporterFleetStatisticsUpdated",
                         PERMISSION_DENIED_ERROR_CODE,
                         "Permission denied"
                     );
-                    return pubsub.asyncIterator("ReporterVehicleStatsModified");
+                    return pubsub.asyncIterator("ReporterFleetStatisticsUpdated");
                 },
                 (payload, variables, context, info) => {
-                    return payload
-                        ? (payload.ReporterVehicleStatsModified.id === variables.id) || (variables.id === "ANY")
-                        : false;
+                    return payload ? true : false;
                 }
             )
         }
@@ -123,8 +110,8 @@ module.exports = {
 
 const eventDescriptors = [
     {
-        backendEventName: "ReporterVehicleStatsModified",
-        gqlSubscriptionName: "ReporterVehicleStatsModified",
+        backendEventName: "FLEET_STATISTICS_UPDATED",
+        gqlSubscriptionName: "ReporterFleetStatisticsUpdated",
         dataExtractor: evt => evt.data, // OPTIONAL, only use if needed
         onError: (error, descriptor) =>
             console.log(`Error processing ${descriptor.backendEventName}`), // OPTIONAL, only use if needed
