@@ -56,7 +56,7 @@ class CqrsService {
     const subscription = broker
       .getMessageListener$([aggregateType], messageTypes).pipe(
         tap(request => {
-          ConsoleLogger.d(`CqrsService.subscribeRequestHandler: aggregateType: ${aggregateType}, messageTypes: ${messageTypes}, request: ${JSON.stringify(request)}`);
+          ConsoleLogger.d(`CqrsService.subscribeRequestHandler: aggregateType: ${aggregateType}, messageTypes: ${messageTypes}, request topic: ${JSON.stringify(request.topic)}`);
         }),
         mergeMap(request =>
           this.verifyRequest$(aggregateType, request).pipe(

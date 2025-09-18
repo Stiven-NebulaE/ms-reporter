@@ -1,8 +1,9 @@
 'use strict'
 
-const { of , Subject, Observable, concat , throwError , EMPTY} = require("rxjs");
-const { tap, mergeMap, bufferTime, filter, catchError, toArray, map, pluck, takeUntil } = require('rxjs/operators');
+const { of } = require("rxjs");
+const { tap } = require('rxjs/operators');
 const { ConsoleLogger } = require('@nebulae/backend-node-tools').log;
+
 /**
  * Singleton instance
  * @type { VehicleStatsES }
@@ -12,32 +13,17 @@ let instance;
 class VehicleStatsES {
 
     constructor() {
-        this.evtSubject$ = new Subject();
     }
 
-
     start$() {
-        ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Starting vehicle events processing`);
+        ConsoleLogger.i(`VehicleStatsES.start$: Starting vehicle events processing`);
         
-        return new Observable(subscriber => { 
-    
-              // Subscribe to MQTT events and process them in batches
-              //this.mqttService.getVehicleEventsSubject().pipe(
-              this.evtSubject$.pipe(
-                tap(event => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Received event from subject: ${JSON.stringify(event)}`)),
-                bufferTime(1000), // Buffer events for 1 second
-                filter(buffer => buffer.length > 0),
-                tap(buffer => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Processing batch of ${buffer.length} events`)),
-                mergeMap(events => this.processBatch$(events))
-              ).subscribe(
-                (EVT) => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Event processed: ${JSON.stringify(EVT)}`),
-                (err) => ConsoleLogger.e(`VehicleStatsCRUD.processVehicleEvents$: Error processing events: ${err.message}`),
-                () => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Completed processing events`)
-              );
-              subscriber.next('this.mqttService.getVehicleEventsSubject() STARTED');
-              subscriber.complete();
-        });    
-      }
+        // The VehicleEventsProcessor handles MQTT events directly
+        // This ES class is kept for Event Store compatibility if needed
+        ConsoleLogger.i(`VehicleStatsES.start$: VehicleEventsProcessor will handle MQTT events`);
+        
+        return of('VehicleStatsES started - MQTT handled by VehicleEventsProcessor');
+    }
 
     /**     
      * Generates and returns an object that defines the Event-Sourcing events handlers.
@@ -50,27 +36,21 @@ class VehicleStatsES {
     generateEventProcessorMap() {
         return {
             'Vehicle': {
-                "VehicleGenerated": { fn: instance.handleVehicleGenerated$, instance, processOnlyOnSync: false },
+                "Generated": { fn: instance.handleVehicleGenerated$, instance, processOnlyOnSync: false },
             }
         }
     };
 
     /**
-     * Handle VehicleGenerated events from ms-generator
+     * Handle VehicleGenerated events from Event Store (if any)
      * @param {*} VehicleGeneratedEvent Vehicle Generated Event
      */
     handleVehicleGenerated$({ etv, aid, av, data, user, timestamp }) {
-        ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: START - aid=${aid}, timestamp=${timestamp}, data=${JSON.stringify(data)}`);
-        this.evtSubject$.next({ etv, aid, av, data, user, timestamp });
-        // Emit the event to the CRUD service for batch processing
-        const VehicleStatsCRUD = require("./VehicleStatsCRUD");
-        const crudInstance = VehicleStatsCRUD();
+        ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: Event received from Event Store - aid=${aid}`);
         
-        ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: About to emit event to CRUD service`);
-        
-        return crudInstance.emitVehicleEvent$({ etv, aid, av, data, user, timestamp }).pipe(
-            tap(() => ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: SUCCESS - Event emitted for processing ${aid}`)),
-            tap(() => ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: END - aid=${aid}`))
+        // For now, just log the event. The VehicleEventsProcessor handles MQTT events directly
+        return of({ success: true }).pipe(
+            tap(() => ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: Event logged from Event Store: ${aid}`))
         );
     }
 }
