@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
-const { of, forkJoin, from, iif, throwError, Subject, interval, EMPTY } = require("rxjs");
+const { of, forkJoin, from, iif, throwError, Subject, interval, EMPTY, Observable } = require("rxjs");
 const { mergeMap, catchError, map, toArray, pluck, takeUntil, tap, filter, bufferTime } = require('rxjs/operators');
 
 const Event = require("@nebulae/event-store").Event;
@@ -31,7 +31,7 @@ let instance;
 class VehicleStatsCRUD {
   constructor() {
     this.vehicleEventsSubject = new Subject();
-    this.mqttService = MqttService();
+    //this.mqttService = MqttService();
   }
 
   /**     
@@ -55,10 +55,10 @@ class VehicleStatsCRUD {
    * Gets fleet statistics
    */
   getFleetStatistics$({ root, args, jwt }, authToken) {
-    console.log(`ESTE LOG NO getFleetStatistics de CRUD <========`);
-    console.log(`ESTE LOG SÍ getFleetStatistics de CRUD <======== AAAAAAAAAAAAAAAA`);
+    console.log("ESTE LOG NO getFleetStatistics de CRUD <========");
+    console.log("ESTE LOG SÍ getFleetStatistics de CRUD <======== AAAAAAAAAAAAAAAA");
 
-    ConsoleLogger.i(`VehicleStatsCRUD.getFleetStatistics$: START - Getting fleet statistics`);
+    ConsoleLogger.i("VehicleStatsCRUD.getFleetStatistics$: START - Getting fleet statistics");
     // return of({
     //   totalVehicles: 100,
     //   vehiclesByType: {
@@ -101,34 +101,13 @@ class VehicleStatsCRUD {
     );
   }
 
-  /**
-   * Processes vehicle events in batches
-   */
-  processVehicleEvents$() {
-    ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Starting vehicle events processing`);
-    
-    // Start MQTT subscription
-    this.mqttService.start$().subscribe({
-      next: (result) => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: MQTT service started: ${result}`),
-      error: (error) => ConsoleLogger.e(`VehicleStatsCRUD.processVehicleEvents$: MQTT service error: ${error.message}`)
-    });
-    
-    // Subscribe to MQTT events and process them in batches
-    return this.mqttService.getVehicleEventsSubject().pipe(
-      tap(event => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Received event from subject: ${JSON.stringify(event)}`)),
-      bufferTime(1000), // Buffer events for 1 second
-      filter(buffer => buffer.length > 0),
-      tap(buffer => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Processing batch of ${buffer.length} events`)),
-      mergeMap(events => this.processBatch$(events))
-    );
-  }
 
   /**
    * Processes a batch of vehicle events
    */
   processBatch$(events) {
     try {
-      console.log(`ESTE LOG SÍ processBatch <========`);
+      console.log("ESTE LOG SÍ processBatch <========");
 
       ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: START - Processing batch of ${events.length} events`);
       

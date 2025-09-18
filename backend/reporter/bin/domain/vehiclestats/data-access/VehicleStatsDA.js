@@ -215,8 +215,13 @@ class VehicleStatsDA {
         
         // Calculate average HP if not already calculated
         if (stats.hpStats && stats.hpStats.count > 0 && !stats.hpStats.avg) {
-          stats.hpStats.avg = stats.hpStats.sum / stats.hpStats.count;
-          ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: Calculated average HP: ${stats.hpStats.avg}`);
+          if (stats.hpStats.sum !== null && stats.hpStats.sum !== undefined) {
+            stats.hpStats.avg = stats.hpStats.sum / stats.hpStats.count;
+            ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: Calculated average HP: ${stats.hpStats.avg}`);
+          } else {
+            stats.hpStats.avg = null;
+            ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: Set average HP to null because sum is null`);
+          }
         }
         
         ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: SUCCESS - Returning stats: ${JSON.stringify(stats)}`);
@@ -239,33 +244,42 @@ class VehicleStatsDA {
       const updates = this.calculateStatsUpdates(events);
       ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: Calculated updates: ${JSON.stringify(updates)}`);
       
+      // Build update object dynamically to handle null values
+      const updateObj = {
+        $inc: {
+          totalVehicles: updates.totalVehicles,
+          "vehiclesByType.SUV": updates.vehiclesByType.SUV,
+          "vehiclesByType.PickUp": updates.vehiclesByType.PickUp,
+          "vehiclesByType.Sedan": updates.vehiclesByType.Sedan,
+          "vehiclesByType.Hatchback": updates.vehiclesByType.Hatchback,
+          "vehiclesByType.Coupe": updates.vehiclesByType.Coupe,
+          "vehiclesByDecade.decade1980s": updates.vehiclesByDecade.decade1980s,
+          "vehiclesByDecade.decade1990s": updates.vehiclesByDecade.decade1990s,
+          "vehiclesByDecade.decade2000s": updates.vehiclesByDecade.decade2000s,
+          "vehiclesByDecade.decade2010s": updates.vehiclesByDecade.decade2010s,
+          "vehiclesByDecade.decade2020s": updates.vehiclesByDecade.decade2020s,
+          "vehiclesBySpeedClass.Lento": updates.vehiclesBySpeedClass.Lento,
+          "vehiclesBySpeedClass.Normal": updates.vehiclesBySpeedClass.Normal,
+          "vehiclesBySpeedClass.Rapido": updates.vehiclesBySpeedClass.Rapido,
+          "hpStats.sum": updates.hpStats.sum,
+          "hpStats.count": updates.hpStats.count
+        },
+        $set: {
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      // Only add min/max operations if we have valid values
+      if (updates.hpStats.min !== null) {
+        updateObj.$min = { "hpStats.min": updates.hpStats.min };
+      }
+      if (updates.hpStats.max !== null) {
+        updateObj.$max = { "hpStats.max": updates.hpStats.max };
+      }
+      
       return collection.findOneAndUpdate(
         { _id: "real_time_fleet_stats" },
-        {
-          $inc: {
-            totalVehicles: updates.totalVehicles,
-            "vehiclesByType.SUV": updates.vehiclesByType.SUV,
-            "vehiclesByType.PickUp": updates.vehiclesByType.PickUp,
-            "vehiclesByType.Sedan": updates.vehiclesByType.Sedan,
-            "vehiclesByType.Hatchback": updates.vehiclesByType.Hatchback,
-            "vehiclesByType.Coupe": updates.vehiclesByType.Coupe,
-            "vehiclesByDecade.decade1980s": updates.vehiclesByDecade.decade1980s,
-            "vehiclesByDecade.decade1990s": updates.vehiclesByDecade.decade1990s,
-            "vehiclesByDecade.decade2000s": updates.vehiclesByDecade.decade2000s,
-            "vehiclesByDecade.decade2010s": updates.vehiclesByDecade.decade2010s,
-            "vehiclesByDecade.decade2020s": updates.vehiclesByDecade.decade2020s,
-            "vehiclesBySpeedClass.Lento": updates.vehiclesBySpeedClass.Lento,
-            "vehiclesBySpeedClass.Normal": updates.vehiclesBySpeedClass.Normal,
-            "vehiclesBySpeedClass.Rapido": updates.vehiclesBySpeedClass.Rapido,
-            "hpStats.sum": updates.hpStats.sum,
-            "hpStats.count": updates.hpStats.count
-          },
-          $min: { "hpStats.min": updates.hpStats.min },
-          $max: { "hpStats.max": updates.hpStats.max },
-          $set: {
-            lastUpdated: new Date().toISOString()
-          }
-        },
+        updateObj,
         { upsert: true, returnOriginal: false }
       );
     }).pipe(
@@ -273,7 +287,10 @@ class VehicleStatsDA {
       mergeMap(result => {
         // Calculate average HP after update
         const updatedStats = result.value;
-        const avg = updatedStats.hpStats.count > 0 ? updatedStats.hpStats.sum / updatedStats.hpStats.count : 0;
+        let avg = null;
+        if (updatedStats.hpStats.count > 0 && updatedStats.hpStats.sum !== null && updatedStats.hpStats.sum !== undefined) {
+          avg = updatedStats.hpStats.sum / updatedStats.hpStats.count;
+        }
         ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: Calculated average HP: ${avg}`);
         
         return collection.findOneAndUpdate(
@@ -296,7 +313,7 @@ class VehicleStatsDA {
       vehiclesByType: { SUV: 0, PickUp: 0, Sedan: 0, Hatchback: 0, Coupe: 0 },
       vehiclesByDecade: { decade1980s: 0, decade1990s: 0, decade2000s: 0, decade2010s: 0, decade2020s: 0 },
       vehiclesBySpeedClass: { Lento: 0, Normal: 0, Rapido: 0 },
-      hpStats: { sum: 0, count: events.length, min: Infinity, max: -Infinity }
+      hpStats: { sum: 0, count: events.length, min: events.length > 0 ? Infinity : null, max: events.length > 0 ? -Infinity : null }
     };
 
     events.forEach(event => {
@@ -374,11 +391,11 @@ class VehicleStatsDA {
         Rapido: 0
       },
       hpStats: {
-        min: 0,
-        max: 0,
-        sum: 0,
+        min: null,
+        max: null,
+        sum: null,
         count: 0,
-        avg: 0
+        avg: null
       },
       lastUpdated: new Date().toISOString()
     };

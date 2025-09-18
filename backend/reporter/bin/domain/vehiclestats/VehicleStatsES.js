@@ -1,7 +1,7 @@
 'use strict'
 
-const { of } = require("rxjs");
-const { tap, mergeMap } = require('rxjs/operators');
+const { of , Subject, Observable, concat , throwError , EMPTY} = require("rxjs");
+const { tap, mergeMap, bufferTime, filter, catchError, toArray, map, pluck, takeUntil } = require('rxjs/operators');
 const { ConsoleLogger } = require('@nebulae/backend-node-tools').log;
 /**
  * Singleton instance
@@ -12,7 +12,32 @@ let instance;
 class VehicleStatsES {
 
     constructor() {
+        this.evtSubject$ = new Subject();
     }
+
+
+    start$() {
+        ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Starting vehicle events processing`);
+        
+        return new Observable(subscriber => { 
+    
+              // Subscribe to MQTT events and process them in batches
+              //this.mqttService.getVehicleEventsSubject().pipe(
+              this.evtSubject$.pipe(
+                tap(event => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Received event from subject: ${JSON.stringify(event)}`)),
+                bufferTime(1000), // Buffer events for 1 second
+                filter(buffer => buffer.length > 0),
+                tap(buffer => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Processing batch of ${buffer.length} events`)),
+                mergeMap(events => this.processBatch$(events))
+              ).subscribe(
+                (EVT) => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Event processed: ${JSON.stringify(EVT)}`),
+                (err) => ConsoleLogger.e(`VehicleStatsCRUD.processVehicleEvents$: Error processing events: ${err.message}`),
+                () => ConsoleLogger.i(`VehicleStatsCRUD.processVehicleEvents$: Completed processing events`)
+              );
+              subscriber.next('this.mqttService.getVehicleEventsSubject() STARTED');
+              subscriber.complete();
+        });    
+      }
 
     /**     
      * Generates and returns an object that defines the Event-Sourcing events handlers.
@@ -36,7 +61,7 @@ class VehicleStatsES {
      */
     handleVehicleGenerated$({ etv, aid, av, data, user, timestamp }) {
         ConsoleLogger.i(`VehicleStatsES.handleVehicleGenerated$: START - aid=${aid}, timestamp=${timestamp}, data=${JSON.stringify(data)}`);
-        
+        this.evtSubject$.next({ etv, aid, av, data, user, timestamp });
         // Emit the event to the CRUD service for batch processing
         const VehicleStatsCRUD = require("./VehicleStatsCRUD");
         const crudInstance = VehicleStatsCRUD();
@@ -59,5 +84,5 @@ module.exports = () => {
         instance = new VehicleStatsES();
         ConsoleLogger.i(`${instance.constructor.name} Singleton created`);
     }
-    return instance;
+    return instance;
 };

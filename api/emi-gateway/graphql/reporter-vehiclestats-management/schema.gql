@@ -35,11 +35,11 @@ type VehicleSpeedClassStats {
 }
 
 type HpStats {
-  min: Int!
-  max: Int!
-  sum: Int!
+  min: Int
+  max: Int
+  sum: Int
   count: Int!
-  avg: Float!
+  avg: Float
 }
 
 extend type Query {

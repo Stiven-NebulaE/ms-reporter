@@ -12,7 +12,7 @@ module.exports = {
    */
   start$: concat(
     DataAcess.start$,
-    VehicleStatsCRUD.processVehicleEvents$()
+    VehicleStatsES.start$()
   ),
   /**
    * start for syncing workflow

@@ -31,7 +31,7 @@ function VehicleStatssTable({ fleetStats }) {
 
     // Calculate percentages
     const getPercentage = (value) => {
-        return totalVehicles > 0 ? ((value / totalVehicles) * 100).toFixed(1) : 0;
+        return totalVehicles > 0 ? ((value / totalVehicles) * 100) : 0;
     };
 
     return (
@@ -49,7 +49,7 @@ function VehicleStatssTable({ fleetStats }) {
                                     <Box display="flex" justifyContent="space-between" alignItems="center">
                                         <Typography variant="body2">{type}:</Typography>
                                         <Typography variant="body2">
-                                            {count.toLocaleString()} ({getPercentage(count)}%)
+                                            {count.toLocaleString()} ({getPercentage(count).toFixed(1)}%)
                                         </Typography>
                                     </Box>
                                     <LinearProgress 
@@ -77,7 +77,7 @@ function VehicleStatssTable({ fleetStats }) {
                                         <Box display="flex" justifyContent="space-between" alignItems="center">
                                             <Typography variant="body2">{decadeLabel}:</Typography>
                                             <Typography variant="body2">
-                                                {count.toLocaleString()} ({getPercentage(count)}%)
+                                                {count.toLocaleString()} ({getPercentage(count).toFixed(1)}%)
                                             </Typography>
                                         </Box>
                                         <LinearProgress 
@@ -100,19 +100,34 @@ function VehicleStatssTable({ fleetStats }) {
                                 Potencia (HP)
                             </Typography>
                             <Box mb={2}>
-                                <Typography variant="body2">
-                                    Mínimo: <Chip label={hpStats.min} size="small" />
-                                </Typography>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="body2">Mínimo:</Typography>
+                                    <Chip label={hpStats.min !== null ? hpStats.min : 'N/A'} size="small" />
+                                </Box>
                             </Box>
                             <Box mb={2}>
-                                <Typography variant="body2">
-                                    Máximo: <Chip label={hpStats.max} size="small" />
-                                </Typography>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="body2">Máximo:</Typography>
+                                    <Chip label={hpStats.max !== null ? hpStats.max : 'N/A'} size="small" />
+                                </Box>
                             </Box>
                             <Box mb={2}>
-                                <Typography variant="body2">
-                                    Promedio: <Chip label={hpStats.avg.toFixed(1)} size="small" />
-                                </Typography>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="body2">Suma:</Typography>
+                                    <Chip label={hpStats.sum !== null ? hpStats.sum.toLocaleString() : 'N/A'} size="small" />
+                                </Box>
+                            </Box>
+                            <Box mb={2}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="body2">Promedio:</Typography>
+                                    <Chip label={hpStats.avg !== null ? hpStats.avg.toFixed(1) : 'N/A'} size="small" />
+                                </Box>
+                            </Box>
+                            <Box mb={2}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="body2">Total vehículos:</Typography>
+                                    <Chip label={hpStats.count} size="small" />
+                                </Box>
                             </Box>
                         </CardContent>
                     </Card>
@@ -133,7 +148,7 @@ function VehicleStatssTable({ fleetStats }) {
                                                 {count.toLocaleString()}
                                             </Typography>
                                             <Typography variant="body2" color="textSecondary">
-                                                {speedClass} ({getPercentage(count)}%)
+                                                {speedClass} ({getPercentage(count).toFixed(1)}%)
                                             </Typography>
                                             <LinearProgress 
                                                 variant="determinate" 

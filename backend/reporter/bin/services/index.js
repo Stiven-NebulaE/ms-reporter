@@ -9,7 +9,6 @@ const { concat } = require("rxjs");
 const services = {
     EventStoreService: require("./event-store-service"),
     CqrsService: require("./cqrs-service"),
-    MqttService: require("./mqtt-service"),
 };
 
 module.exports = {
