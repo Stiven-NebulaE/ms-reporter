@@ -26,13 +26,14 @@ function VehicleStatssHeader({ fleetStats }) {
                             label={totalVehicles.toLocaleString()} 
                             color="secondary"
                             variant="outlined"
+                            className="ml-1"
                         />
                         {lastUpdated && (
                             <>
-                                <Typography variant="body1">
+                                <Typography variant="body1" className="ml-2">
                                     | Última actualización: 
                                 </Typography>
-                                <Typography variant="body2">
+                                <Typography variant="body2" className="ml-1">
                                     {new Date(lastUpdated).toLocaleString()}
                                 </Typography>
                             </>
