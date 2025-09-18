@@ -43,7 +43,7 @@ type HpStats {
 }
 
 extend type Query {
-  ReporterGetFleetStatistics: FleetStatistics
+  ReporterGetFleetStatistics(organizationId: String): FleetStatistics
 }
 
 extend type Subscription {

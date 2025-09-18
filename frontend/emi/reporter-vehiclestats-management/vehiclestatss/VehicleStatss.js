@@ -15,6 +15,9 @@ function VehicleStatss() {
 
     // GraphQL query
     const { data: queryData, refetch: refetchStats } = useQuery(ReporterGetFleetStatistics, {
+        variables: {
+            organizationId: user.selectedOrganization && user.selectedOrganization.id
+        },
         fetchPolicy: 'network-only'
     });
 

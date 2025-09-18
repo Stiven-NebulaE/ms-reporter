@@ -55,6 +55,9 @@ class CqrsService {
     const messageTypes = Object.keys(this.requestProcessMap[aggregateType]);
     const subscription = broker
       .getMessageListener$([aggregateType], messageTypes).pipe(
+        tap(request => {
+          ConsoleLogger.d(`CqrsService.subscribeRequestHandler: aggregateType: ${aggregateType}, messageTypes: ${messageTypes}, request: ${JSON.stringify(request)}`);
+        }),
         mergeMap(request =>
           this.verifyRequest$(aggregateType, request).pipe(
             mergeMap(request => (request.failedValidations.length > 0)

@@ -22,7 +22,7 @@ function getResponseFromBackEnd$(response) {
                 if (resp.result.code != 200) {
                     const err = new Error();
                     err.name = 'Error';
-                    err.message = resp.result.error.msg;
+                    err.message = resp.result.error;
                     // this[Symbol()] = resp.result.error;
                     Error.captureStackTrace(err, 'Error');
                     throw err;
@@ -72,7 +72,7 @@ module.exports = {
     //// QUERY ///////
     Query: {
         ReporterGetFleetStatistics(root, args, context) {
-            return sendToBackEndHandler$(root, args, context, READ_ROLES, 'query', 'VehicleStats', 'ReporterGetFleetStatistics', 10000).toPromise();
+            return sendToBackEndHandler$(root, args, context, READ_ROLES, 'query', 'VehicleStats', 'ReporterGetFleetStatistics', 2000).toPromise();
         }
     },
 

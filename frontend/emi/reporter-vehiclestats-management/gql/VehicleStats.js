@@ -2,8 +2,8 @@ import { gql } from 'apollo-boost';
 
 // Query to get fleet statistics
 export const ReporterGetFleetStatistics = gql`
-    query ReporterGetFleetStatistics {
-        ReporterGetFleetStatistics {
+    query ReporterGetFleetStatistics($organizationId: String) {
+        ReporterGetFleetStatistics(organizationId: $organizationId) {
             totalVehicles
             vehiclesByType {
                 SUV

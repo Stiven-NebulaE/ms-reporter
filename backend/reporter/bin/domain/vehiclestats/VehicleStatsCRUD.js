@@ -13,7 +13,7 @@ const { brokerFactory } = require("@nebulae/backend-node-tools").broker;
 const broker = brokerFactory();
 const eventSourcing = require("../../tools/event-sourcing").eventSourcing;
 const VehicleStatsDA = require("./data-access/VehicleStatsDA");
-const MqttService = require('../../services/mqtt-service');
+const MqttService = require('../../services/mqtt-service').getInstance;
 
 const READ_ROLES = ["VEHICLESTATS_READ"];
 const WRITE_ROLES = ["VEHICLESTATS_WRITE"];
@@ -31,7 +31,7 @@ let instance;
 class VehicleStatsCRUD {
   constructor() {
     this.vehicleEventsSubject = new Subject();
-    this.mqttService = MqttService.getInstance();
+    this.mqttService = MqttService();
   }
 
   /**     
@@ -56,6 +56,7 @@ class VehicleStatsCRUD {
    */
   getFleetStatistics$({ root, args, jwt }, authToken) {
     console.log(`ESTE LOG NO getFleetStatistics de CRUD <========`);
+    console.log(`ESTE LOG SÍ getFleetStatistics de CRUD <======== AAAAAAAAAAAAAAAA`);
 
     ConsoleLogger.i(`VehicleStatsCRUD.getFleetStatistics$: START - Getting fleet statistics`);
     // return of({
