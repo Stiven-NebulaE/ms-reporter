@@ -11,6 +11,26 @@ const CollectionName = 'VehicleStats';
 const FleetStatsCollectionName = 'fleet_statistics';
 const ProcessedVehiclesCollectionName = 'processed_vehicles';
 
+// Vehicle configuration constants
+const VEHICLE_TYPES = ['SUV', 'PickUp', 'Sedan', 'Hatchback', 'Coupe'];
+const VEHICLE_DECADES = ['decade1980s', 'decade1990s', 'decade2000s', 'decade2010s', 'decade2020s'];
+const SPEED_CLASSES = ['Lento', 'Normal', 'Rapido'];
+
+// Speed classification thresholds
+const SPEED_THRESHOLDS = {
+  SLOW_MAX: 140,
+  NORMAL_MAX: 240
+};
+
+// Year ranges for decades
+const DECADE_RANGES = {
+  decade1980s: { min: 1980, max: 1989 },
+  decade1990s: { min: 1990, max: 1999 },
+  decade2000s: { min: 2000, max: 2009 },
+  decade2010s: { min: 2010, max: 2019 },
+  decade2020s: { min: 2020, max: 2029 }
+};
+
 class VehicleStatsDA {
   static start$(mongoDbInstance) {
     return Observable.create(observer => {
@@ -213,8 +233,8 @@ class VehicleStatsDA {
           return this.getDefaultFleetStats();
         }
         
-        // Calculate average HP if not already calculated
-        if (stats.hpStats && stats.hpStats.count > 0 && !stats.hpStats.avg) {
+        // Calculate average HP if not already calculated or if sum/count changed
+        if (stats.hpStats && stats.hpStats.count > 0) {
           if (stats.hpStats.sum !== null && stats.hpStats.sum !== undefined) {
             stats.hpStats.avg = stats.hpStats.sum / stats.hpStats.count;
             ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: Calculated average HP: ${stats.hpStats.avg}`);
@@ -222,6 +242,9 @@ class VehicleStatsDA {
             stats.hpStats.avg = null;
             ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: Set average HP to null because sum is null`);
           }
+        } else if (stats.hpStats) {
+          stats.hpStats.avg = null;
+          ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: Set average HP to null because count is 0`);
         }
         
         ConsoleLogger.i(`VehicleStatsDA.getFleetStatistics$: SUCCESS - Returning stats: ${JSON.stringify(stats)}`);
@@ -230,79 +253,6 @@ class VehicleStatsDA {
     );
   }
 
-  /**
-   * Updates fleet statistics with new vehicle events
-   */
-  static updateFleetStatistics$(events) {
-    console.log(`ESTE LOG SÍ update <========`);
-
-    ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: START - Updating stats with ${events.length} events`);
-    
-    const collection = mongoDB.db.collection(FleetStatsCollectionName);
-    
-    return defer(() => {
-      const updates = this.calculateStatsUpdates(events);
-      ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: Calculated updates: ${JSON.stringify(updates)}`);
-      
-      // Build update object dynamically to handle null values
-      const updateObj = {
-        $inc: {
-          totalVehicles: updates.totalVehicles,
-          "vehiclesByType.SUV": updates.vehiclesByType.SUV,
-          "vehiclesByType.PickUp": updates.vehiclesByType.PickUp,
-          "vehiclesByType.Sedan": updates.vehiclesByType.Sedan,
-          "vehiclesByType.Hatchback": updates.vehiclesByType.Hatchback,
-          "vehiclesByType.Coupe": updates.vehiclesByType.Coupe,
-          "vehiclesByDecade.decade1980s": updates.vehiclesByDecade.decade1980s,
-          "vehiclesByDecade.decade1990s": updates.vehiclesByDecade.decade1990s,
-          "vehiclesByDecade.decade2000s": updates.vehiclesByDecade.decade2000s,
-          "vehiclesByDecade.decade2010s": updates.vehiclesByDecade.decade2010s,
-          "vehiclesByDecade.decade2020s": updates.vehiclesByDecade.decade2020s,
-          "vehiclesBySpeedClass.Lento": updates.vehiclesBySpeedClass.Lento,
-          "vehiclesBySpeedClass.Normal": updates.vehiclesBySpeedClass.Normal,
-          "vehiclesBySpeedClass.Rapido": updates.vehiclesBySpeedClass.Rapido,
-          "hpStats.sum": updates.hpStats.sum,
-          "hpStats.count": updates.hpStats.count
-        },
-        $set: {
-          lastUpdated: new Date().toISOString()
-        }
-      };
-
-      // Only add min/max operations if we have valid values
-      if (updates.hpStats.min !== null) {
-        updateObj.$min = { "hpStats.min": updates.hpStats.min };
-      }
-      if (updates.hpStats.max !== null) {
-        updateObj.$max = { "hpStats.max": updates.hpStats.max };
-      }
-      
-      return collection.findOneAndUpdate(
-        { _id: "real_time_fleet_stats" },
-        updateObj,
-        { upsert: true, returnOriginal: false }
-      );
-    }).pipe(
-      tap(result => ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: MongoDB update result: ${JSON.stringify(result)}`)),
-      mergeMap(result => {
-        // Calculate average HP after update
-        const updatedStats = result.value;
-        let avg = null;
-        if (updatedStats.hpStats.count > 0 && updatedStats.hpStats.sum !== null && updatedStats.hpStats.sum !== undefined) {
-          avg = updatedStats.hpStats.sum / updatedStats.hpStats.count;
-        }
-        ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: Calculated average HP: ${avg}`);
-        
-        return collection.findOneAndUpdate(
-          { _id: "real_time_fleet_stats" },
-          { $set: { "hpStats.avg": avg } },
-          { returnOriginal: false }
-        );
-      }),
-      tap(result => ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: SUCCESS - Final result: ${JSON.stringify(result)}`)),
-      map(result => result.value)
-    );
-  }
 
   /**
    * Calculates statistics updates from vehicle events
@@ -310,58 +260,131 @@ class VehicleStatsDA {
   static calculateStatsUpdates(events) {
     const updates = {
       totalVehicles: events.length,
-      vehiclesByType: { SUV: 0, PickUp: 0, Sedan: 0, Hatchback: 0, Coupe: 0 },
-      vehiclesByDecade: { decade1980s: 0, decade1990s: 0, decade2000s: 0, decade2010s: 0, decade2020s: 0 },
-      vehiclesBySpeedClass: { Lento: 0, Normal: 0, Rapido: 0 },
-      hpStats: { sum: 0, count: events.length, min: events.length > 0 ? Infinity : null, max: events.length > 0 ? -Infinity : null }
+      vehiclesByType: this.createInitialCounters(VEHICLE_TYPES),
+      vehiclesByDecade: this.createInitialCounters(VEHICLE_DECADES),
+      vehiclesBySpeedClass: this.createInitialCounters(SPEED_CLASSES),
+      hpStats: this.createInitialHpStats(events.length)
     };
 
     events.forEach(event => {
       const vehicle = event.data;
-      
-      // Count by type
-      if (updates.vehiclesByType[vehicle.type] !== undefined) {
-        updates.vehiclesByType[vehicle.type]++;
-      }
-      
-      // Count by decade
-      const decade = this.getDecade(vehicle.year);
-      if (updates.vehiclesByDecade[decade] !== undefined) {
-        updates.vehiclesByDecade[decade]++;
-      }
-      
-      // Count by speed class
-      const speedClass = this.getSpeedClass(vehicle.topSpeed);
-      updates.vehiclesBySpeedClass[speedClass]++;
-      
-      // HP statistics
-      updates.hpStats.sum += vehicle.hp;
-      updates.hpStats.min = Math.min(updates.hpStats.min, vehicle.hp);
-      updates.hpStats.max = Math.max(updates.hpStats.max, vehicle.hp);
+      this.processVehicleEvent(vehicle, updates);
     });
 
+    this.cleanInfiniteValues(updates.hpStats);
     return updates;
   }
 
   /**
-   * Gets decade from year
+   * Creates initial HP statistics structure
    */
-  static getDecade(year) {
-    if (year >= 1980 && year < 1990) return "decade1980s";
-    if (year >= 1990 && year < 2000) return "decade1990s";
-    if (year >= 2000 && year < 2010) return "decade2000s";
-    if (year >= 2010 && year < 2020) return "decade2010s";
-    if (year >= 2020) return "decade2020s";
-    return "decade1980s";
+  static createInitialHpStats(count) {
+    return {
+      sum: 0,
+      count: count,
+      min: count > 0 ? Infinity : null,
+      max: count > 0 ? -Infinity : null
+    };
   }
 
   /**
-   * Gets speed class from top speed
+   * Processes a single vehicle event and updates statistics
+   */
+  static processVehicleEvent(vehicle, updates) {
+    // Count by type
+    if (VEHICLE_TYPES.includes(vehicle.type)) {
+      updates.vehiclesByType[vehicle.type]++;
+    }
+    
+    // Count by decade
+    const decade = this.getDecade(vehicle.year);
+    if (VEHICLE_DECADES.includes(decade)) {
+      updates.vehiclesByDecade[decade]++;
+    }
+    
+    // Count by speed class
+    const speedClass = this.getSpeedClass(vehicle.topSpeed);
+    if (SPEED_CLASSES.includes(speedClass)) {
+      updates.vehiclesBySpeedClass[speedClass]++;
+    }
+    
+    // HP statistics
+    this.updateHpStats(vehicle.hp, updates.hpStats);
+  }
+
+  /**
+   * Updates HP statistics for a single vehicle
+   */
+  static updateHpStats(hp, hpStats) {
+    if (typeof hp === 'number' && !isNaN(hp)) {
+      ConsoleLogger.i(`VehicleStatsDA.updateHpStats: Processing vehicle HP: ${hp}`);
+      hpStats.sum += hp;
+      hpStats.min = Math.min(hpStats.min, hp);
+      hpStats.max = Math.max(hpStats.max, hp);
+      ConsoleLogger.i(`VehicleStatsDA.updateHpStats: Updated HP stats - Sum: ${hpStats.sum}, Min: ${hpStats.min}, Max: ${hpStats.max}`);
+    } else {
+      ConsoleLogger.w(`VehicleStatsDA.updateHpStats: Invalid HP value - HP: ${hp}, Type: ${typeof hp}`);
+    }
+  }
+
+  /**
+   * Cleans infinite values from HP statistics
+   */
+  static cleanInfiniteValues(hpStats) {
+    if (hpStats.min === Infinity) hpStats.min = null;
+    if (hpStats.max === -Infinity) hpStats.max = null;
+  }
+
+  /**
+   * Gets decade from year using configuration
+   */
+  static getDecade(year) {
+    for (const [decade, range] of Object.entries(DECADE_RANGES)) {
+      if (year >= range.min && year <= range.max) {
+        return decade;
+      }
+    }
+    // Default to 1980s for any year outside defined ranges
+    return VEHICLE_DECADES[0];
+  }
+
+  /**
+   * Gets speed class from top speed using configuration
    */
   static getSpeedClass(topSpeed) {
-    if (topSpeed < 140) return "Lento";
-    if (topSpeed <= 240) return "Normal";
-    return "Rapido";
+    if (topSpeed < SPEED_THRESHOLDS.SLOW_MAX) return SPEED_CLASSES[0]; // Lento
+    if (topSpeed <= SPEED_THRESHOLDS.NORMAL_MAX) return SPEED_CLASSES[1]; // Normal
+    return SPEED_CLASSES[2]; // Rapido
+  }
+
+  /**
+   * Creates initial statistics structure using configuration
+   */
+  static createInitialStatsStructure() {
+    return {
+      totalVehicles: 0,
+      vehiclesByType: this.createInitialCounters(VEHICLE_TYPES),
+      vehiclesByDecade: this.createInitialCounters(VEHICLE_DECADES),
+      vehiclesBySpeedClass: this.createInitialCounters(SPEED_CLASSES),
+      hpStats: {
+        min: null,
+        max: null,
+        sum: 0,
+        count: 0,
+        avg: null
+      },
+      lastUpdated: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Creates initial counters object from array of keys
+   */
+  static createInitialCounters(keys) {
+    return keys.reduce((acc, key) => {
+      acc[key] = 0;
+      return acc;
+    }, {});
   }
 
   /**
@@ -370,34 +393,7 @@ class VehicleStatsDA {
   static getDefaultFleetStats() {
     return {
       _id: "real_time_fleet_stats",
-      totalVehicles: 0,
-      vehiclesByType: {
-        SUV: 0,
-        PickUp: 0,
-        Sedan: 0,
-        Hatchback: 0,
-        Coupe: 0
-      },
-      vehiclesByDecade: {
-        decade1980s: 0,
-        decade1990s: 0,
-        decade2000s: 0,
-        decade2010s: 0,
-        decade2020s: 0
-      },
-      vehiclesBySpeedClass: {
-        Lento: 0,
-        Normal: 0,
-        Rapido: 0
-      },
-      hpStats: {
-        min: null,
-        max: null,
-        sum: null,
-        count: 0,
-        avg: null
-      },
-      lastUpdated: new Date().toISOString()
+      ...this.createInitialStatsStructure()
     };
   }
 
@@ -444,22 +440,6 @@ class VehicleStatsDA {
   // ===== FLEET STATISTICS METHODS =====
 
   /**
-   * Gets processed vehicle aids for idempotency
-   * @param {Array} aids - Array of aids to check
-   * @returns {Observable} Observable with array of processed aids
-   */
-  static getProcessedVehicleAids$(aids) {
-    const collection = mongoDB.db.collection(ProcessedVehiclesCollectionName);
-    return defer(() => collection.find(
-      { aid: { $in: aids } },
-      { projection: { aid: 1, _id: 0 } }
-    ).toArray())
-      .pipe(
-        map(results => results.map(r => r.aid))
-      );
-  }
-
-  /**
    * Inserts processed vehicle aids
    * @param {Array} aids - Array of aids to insert
    * @returns {Observable} Observable with result
@@ -480,63 +460,136 @@ class VehicleStatsDA {
    * @returns {Observable} Observable with updated statistics
    */
   static updateFleetStatistics$(batchStats) {
+    ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: Updating with batch stats: ${JSON.stringify(batchStats)}`);
+    
     const collection = mongoDB.db.collection(FleetStatsCollectionName);
+    
+    return defer(() => collection.findOne({ _id: 'real_time_fleet_stats' }))
+      .pipe(
+        mergeMap(currentStats => {
+          const update = this.buildUpdateOperation(batchStats, currentStats);
+          ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: Built update operation: ${JSON.stringify(update)}`);
+          
+          return collection.findOneAndUpdate(
+            { _id: 'real_time_fleet_stats' },
+            update,
+            { returnOriginal: false, upsert: true }
+          );
+        }),
+        tap(result => ConsoleLogger.i(`VehicleStatsDA.updateFleetStatistics$: MongoDB update result: ${JSON.stringify(result)}`)),
+        mergeMap(result => this.updateHpAverage$(result.value)),
+        map(result => result.value)
+      );
+  }
+
+  /**
+   * Builds the MongoDB update operation based on batch stats and current stats
+   * @param {Object} batchStats - Statistics from the batch
+   * @param {Object} currentStats - Current statistics from database
+   * @returns {Object} MongoDB update operation
+   */
+  static buildUpdateOperation(batchStats, currentStats) {
     const update = {
       $inc: {
-        totalVehicles: batchStats.totalVehicles
+        totalVehicles: batchStats.totalVehicles,
+        'hpStats.count': batchStats.hpStats.count
       },
       $set: {
         lastUpdated: new Date().toISOString()
       }
     };
 
-    // Add vehicles by type increments
-    Object.keys(batchStats.vehiclesByType).forEach(type => {
-      update.$inc[`vehiclesByType.${type}`] = batchStats.vehiclesByType[type];
+    // Add vehicle type increments
+    this.addIncrements(update, 'vehiclesByType', batchStats.vehiclesByType);
+    this.addIncrements(update, 'vehiclesByDecade', batchStats.vehiclesByDecade);
+    this.addIncrements(update, 'vehiclesBySpeedClass', batchStats.vehiclesBySpeedClass);
+
+    // Handle HP statistics with null-safe operations
+    this.handleHpStatistics(update, batchStats, currentStats);
+
+    return update;
+  }
+
+  /**
+   * Adds increment operations for a given category
+   * @param {Object} update - Update operation object
+   * @param {string} category - Category name (e.g., 'vehiclesByType')
+   * @param {Object} stats - Statistics object
+   */
+  static addIncrements(update, category, stats) {
+    Object.keys(stats).forEach(key => {
+      update.$inc[`${category}.${key}`] = stats[key];
     });
+  }
 
-    // Add vehicles by decade increments
-    Object.keys(batchStats.vehiclesByDecade).forEach(decade => {
-      update.$inc[`vehiclesByDecade.${decade}`] = batchStats.vehiclesByDecade[decade];
-    });
+  /**
+   * Handles HP statistics with null-safe operations
+   * @param {Object} update - Update operation object
+   * @param {Object} batchStats - Batch statistics
+   * @param {Object} currentStats - Current statistics
+   */
+  static handleHpStatistics(update, batchStats, currentStats) {
+    const { hpStats } = batchStats;
+    const currentHpStats = currentStats?.hpStats;
 
-    // Add vehicles by speed class increments
-    Object.keys(batchStats.vehiclesBySpeedClass).forEach(speedClass => {
-      update.$inc[`vehiclesBySpeedClass.${speedClass}`] = batchStats.vehiclesBySpeedClass[speedClass];
-    });
-
-    // Add HP statistics increments
-    update.$inc['hpStats.sum'] = batchStats.hpStats.sum;
-    update.$inc['hpStats.count'] = batchStats.hpStats.count;
-
-    // Add min/max operations
-    if (batchStats.hpStats.min !== Infinity) {
-      update.$min = { 'hpStats.min': batchStats.hpStats.min };
+    // Handle HP sum
+    if (this.isNullishOrNaN(currentHpStats?.sum)) {
+      update.$set['hpStats.sum'] = hpStats.sum;
+      ConsoleLogger.i(`VehicleStatsDA.handleHpStatistics: Using $set for HP sum (current: ${currentHpStats?.sum})`);
+    } else {
+      update.$inc['hpStats.sum'] = hpStats.sum;
+      ConsoleLogger.i(`VehicleStatsDA.handleHpStatistics: Using $inc for HP sum (current: ${currentHpStats?.sum})`);
     }
-    if (batchStats.hpStats.max !== -Infinity) {
-      update.$max = { 'hpStats.max': batchStats.hpStats.max };
+
+    // Handle HP min
+    if (this.isNullishOrNaN(currentHpStats?.min)) {
+      update.$set['hpStats.min'] = hpStats.min;
+      ConsoleLogger.i(`VehicleStatsDA.handleHpStatistics: Using $set for HP min (current: ${currentHpStats?.min})`);
+    } else {
+      update.$min = { 'hpStats.min': hpStats.min };
+      ConsoleLogger.i(`VehicleStatsDA.handleHpStatistics: Using $min for HP min (current: ${currentHpStats?.min})`);
     }
 
-    return defer(() => collection.findOneAndUpdate(
-      { _id: 'real_time_fleet_stats' },
-      update,
-      { 
-        returnOriginal: false,
-        upsert: true
-      }
-    ))
-      .pipe(
-        map(result => {
-          const stats = result.value;
-          
-          // Calculate average if needed
-          if (stats.hpStats && stats.hpStats.count > 0) {
-            stats.hpStats.avg = stats.hpStats.sum / stats.hpStats.count;
-          }
-          
-          return stats;
-        })
+    // Handle HP max
+    if (this.isNullishOrNaN(currentHpStats?.max)) {
+      update.$set['hpStats.max'] = hpStats.max;
+      ConsoleLogger.i(`VehicleStatsDA.handleHpStatistics: Using $set for HP max (current: ${currentHpStats?.max})`);
+    } else {
+      update.$max = { 'hpStats.max': hpStats.max };
+      ConsoleLogger.i(`VehicleStatsDA.handleHpStatistics: Using $max for HP max (current: ${currentHpStats?.max})`);
+    }
+  }
+
+  /**
+   * Checks if a value is null, undefined, or NaN
+   * @param {*} value - Value to check
+   * @returns {boolean} True if value is nullish or NaN
+   */
+  static isNullishOrNaN(value) {
+    return value === null || value === undefined || isNaN(value);
+  }
+
+  /**
+   * Updates HP average in the database
+   * @param {Object} stats - Updated statistics
+   * @returns {Observable} Observable with result
+   */
+  static updateHpAverage$(stats) {
+    if (stats.hpStats && stats.hpStats.count > 0 && 
+        stats.hpStats.sum !== null && stats.hpStats.sum !== undefined) {
+      
+      const avg = stats.hpStats.sum / stats.hpStats.count;
+      ConsoleLogger.i(`VehicleStatsDA.updateHpAverage$: Calculated average HP: ${avg}`);
+      
+      const collection = mongoDB.db.collection(FleetStatsCollectionName);
+      return collection.findOneAndUpdate(
+        { _id: 'real_time_fleet_stats' },
+        { $set: { 'hpStats.avg': avg } },
+        { returnOriginal: false }
       );
+    }
+    
+    return of({ value: stats });
   }
 
   /**

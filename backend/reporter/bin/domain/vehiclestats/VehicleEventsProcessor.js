@@ -22,6 +22,20 @@ class VehicleEventsProcessor {
     }
 
     /**
+     * Gets decade from year
+     * @param {number} year
+     * @returns {string}
+     */
+    getDecade(year) {
+        if (year >= 1980 && year < 1990) return "decade1980s";
+        if (year >= 1990 && year < 2000) return "decade1990s";
+        if (year >= 2000 && year < 2010) return "decade2000s";
+        if (year >= 2010 && year < 2020) return "decade2010s";
+        if (year >= 2020) return "decade2020s";
+        return "decade1980s";
+    }
+
+    /**
      * Generates a stable hash from vehicle data for idempotency
      * @param {Object} vehicleData
      * @returns {string}
@@ -175,9 +189,25 @@ class VehicleEventsProcessor {
     calculateBatchStats(events) {
         const stats = {
             totalVehicles: events.length,
-            vehiclesByType: {},
-            vehiclesByDecade: {},
-            vehiclesBySpeedClass: {},
+            vehiclesByType: {
+                SUV: 0,
+                PickUp: 0,
+                Sedan: 0,
+                Hatchback: 0,
+                Coupe: 0
+            },
+            vehiclesByDecade: {
+                decade1980s: 0,
+                decade1990s: 0,
+                decade2000s: 0,
+                decade2010s: 0,
+                decade2020s: 0
+            },
+            vehiclesBySpeedClass: {
+                Lento: 0,
+                Normal: 0,
+                Rapido: 0
+            },
             hpStats: {
                 sum: 0,
                 count: events.length,
@@ -193,14 +223,16 @@ class VehicleEventsProcessor {
             const { type, powerSource, hp, year, topSpeed } = data;
 
             // Vehicles by type
-            if (type) {
-                stats.vehiclesByType[type] = (stats.vehiclesByType[type] || 0) + 1;
+            if (type && stats.vehiclesByType[type] !== undefined) {
+                stats.vehiclesByType[type]++;
             }
 
             // Vehicles by decade
             if (year) {
-                const decade = Math.floor(year / 10) * 10 + 's';
-                stats.vehiclesByDecade[decade] = (stats.vehiclesByDecade[decade] || 0) + 1;
+                const decade = this.getDecade(year);
+                if (stats.vehiclesByDecade[decade] !== undefined) {
+                    stats.vehiclesByDecade[decade]++;
+                }
             }
 
             // Speed classification
@@ -210,7 +242,9 @@ class VehicleEventsProcessor {
                 else if (topSpeed <= 240) speedClass = 'Normal';
                 else speedClass = 'Rapido';
                 
-                stats.vehiclesBySpeedClass[speedClass] = (stats.vehiclesBySpeedClass[speedClass] || 0) + 1;
+                if (stats.vehiclesBySpeedClass[speedClass] !== undefined) {
+                    stats.vehiclesBySpeedClass[speedClass]++;
+                }
             }
 
             // HP statistics
@@ -218,12 +252,15 @@ class VehicleEventsProcessor {
                 stats.hpStats.sum += hp;
                 stats.hpStats.min = Math.min(stats.hpStats.min, hp);
                 stats.hpStats.max = Math.max(stats.hpStats.max, hp);
+                ConsoleLogger.i(`VehicleEventsProcessor: HP stats updated - HP: ${hp}, Sum: ${stats.hpStats.sum}, Min: ${stats.hpStats.min}, Max: ${stats.hpStats.max}`);
+            } else {
+                ConsoleLogger.w(`VehicleEventsProcessor: Invalid HP value - HP: ${hp}, Type: ${typeof hp}`);
             }
         });
 
         // Clean infinite values
-        if (stats.hpStats.min === Infinity) stats.hpStats.min = 0;
-        if (stats.hpStats.max === -Infinity) stats.hpStats.max = 0;
+        if (stats.hpStats.min === Infinity) stats.hpStats.min = null;
+        if (stats.hpStats.max === -Infinity) stats.hpStats.max = null;
 
         return stats;
     }

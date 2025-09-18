@@ -132,8 +132,12 @@ class VehicleStatsCRUD {
 
           ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Processing ${newEvents.length} new vehicles`);
 
+          // Calculate batch statistics from events
+          const batchStats = VehicleStatsDA.calculateStatsUpdates(newEvents);
+          ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Calculated batch stats: ${JSON.stringify(batchStats)}`);
+
           // Process each new vehicle and update statistics
-          return VehicleStatsDA.updateFleetStatistics$(newEvents).pipe(
+          return VehicleStatsDA.updateFleetStatistics$(batchStats).pipe(
             tap(() => {
               ConsoleLogger.i(`VehicleStatsCRUD.processBatch$: Statistics updated successfully`);
               
